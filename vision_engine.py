@@ -631,7 +631,8 @@ class MultiTierVisionManager:
         H_mat: np.ndarray,
         gis_area_m2: float,
         world_w: float,
-        world_h: float
+        world_h: float,
+        cam_id: str = "default"
     ) -> Dict[str, Any]:
         """
         Executes vision processing according to the selected tier.
@@ -656,6 +657,27 @@ class MultiTierVisionManager:
 
         count_yolo = len(boxes)
 
+        # Synthetic Pedestrian Silhouette & Head Dot Extractor (for demo camera visualization)
+        if count_yolo == 0 and frame_bgr is not None:
+            blue_mask = cv2.inRange(frame_bgr, (135, 135, 135), (240, 225, 210))
+            contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            synth_boxes = []
+            for cnt in contours:
+                area = cv2.contourArea(cnt)
+                if 10 <= area <= 650:
+                    (hx, hy), hr = cv2.minEnclosingCircle(cnt)
+                    bw = max(10, int(hr * 2.2))
+                    bh = max(22, int(hr * 5.0))
+                    synth_boxes.append([
+                        max(0.0, float(hx - bw / 2)),
+                        max(0.0, float(hy - hr)),
+                        min(float(w - 1), float(hx + bw / 2)),
+                        min(float(h - 1), float(hy + bh))
+                    ])
+            if len(synth_boxes) > 0:
+                boxes = np.array(synth_boxes, dtype=np.float32)
+                count_yolo = len(boxes)
+
         # Ground foot-points and perspective projection
         if count_yolo > 0:
             if effective_tier == VisionTier.TIER_2_HEAD_YOLO:
@@ -675,28 +697,38 @@ class MultiTierVisionManager:
             valid_yolo_count = 0
 
         # Instantaneous YOLO density
-        instant_density = float(valid_yolo_count) / max(gis_area_m2, 10.0)
-        self.ema_density = 0.75 * self.ema_density + 0.25 * instant_density
+        instant_density = float(valid_yolo_count) / max(gis_area_m2, 1.0)
 
-        # ====================================================================
-        # TIER 4: HYBRID AUTO-SWITCHER REGIME LOGIC
-        # ====================================================================
-        # Switch threshold: 2.0 pax/m² (Fruin LoS E critical density threshold)
-        # Hysteresis return: 1.6 pax/m² (prevents rapid chatter)
+        # Per-camera isolated density and crush hysteresis
+        if not hasattr(self, '_cam_ema_density'):
+            self._cam_ema_density = {}
+            self._cam_is_crush = {}
+            self._cam_switch_ts = {}
+
+        curr_ema = self._cam_ema_density.get(cam_id, instant_density)
+        curr_ema = 0.70 * curr_ema + 0.30 * instant_density
+        self._cam_ema_density[cam_id] = curr_ema
+
+        is_crush = self._cam_is_crush.get(cam_id, False)
+        sw_ts = self._cam_switch_ts.get(cam_id, 0.0)
+
+        # Tier 4: Hybrid Auto-Switcher Regime Logic per camera
         if effective_tier == VisionTier.TIER_4_HYBRID_AUTO:
-            if not self.is_crush_regime and self.ema_density >= 2.0:
-                self.is_crush_regime = True
-                self.switch_timestamp = time.time()
-                print(f"[VisionEngine] HYBRID AUTO: Density {self.ema_density:.2f} >= 2.0 pax/m² -> Switching to TIER 3 (CSRNet Density-Map)!")
-            elif self.is_crush_regime and self.ema_density < 1.6 and (time.time() - self.switch_timestamp > 3.0):
-                self.is_crush_regime = False
-                self.switch_timestamp = time.time()
-                print(f"[VisionEngine] HYBRID AUTO: Density cleared {self.ema_density:.2f} < 1.6 pax/m² -> Returning to TIER 1 (YOLO Tracking)!")
+            if not is_crush and curr_ema >= 5.0:
+                is_crush = True
+                sw_ts = time.time()
+                print(f"[VisionEngine] HYBRID AUTO ({cam_id}): Density {curr_ema:.2f} >= 5.0 pax/m² -> Switching to TIER 3 (CSRNet Density-Map)!")
+            elif is_crush and curr_ema < 4.2 and (time.time() - sw_ts > 3.0):
+                is_crush = False
+                sw_ts = time.time()
+                print(f"[VisionEngine] HYBRID AUTO ({cam_id}): Density cleared {curr_ema:.2f} < 4.2 pax/m² -> Returning to TIER 1 (YOLO Tracking)!")
+            self._cam_is_crush[cam_id] = is_crush
+            self._cam_switch_ts[cam_id] = sw_ts
 
         # Decide whether to execute Density-Map branch
         should_run_density_map = (
             effective_tier == VisionTier.TIER_3_DENSITY_MAP or
-            (effective_tier == VisionTier.TIER_4_HYBRID_AUTO and self.is_crush_regime)
+            (effective_tier == VisionTier.TIER_4_HYBRID_AUTO and is_crush)
         )
 
         # ====================================================================
@@ -708,14 +740,14 @@ class MultiTierVisionManager:
                 base_yolo_count=valid_yolo_count
             )
             final_count = int(round(csr_count))
-            final_density = round(float(final_count) / max(gis_area_m2, 10.0), 2)
+            final_density = round(float(curr_ema), 2)
             regime = "CRUSH_REGIME_DENSITY_MAP"
             engine_name = "CSRNet Dilated-CNN (Density Integration)"
         else:
             density_map = None
             heatmap_bgr = None
             final_count = valid_yolo_count
-            final_density = round(float(self.ema_density), 2)
+            final_density = round(float(curr_ema), 2)
             regime = "NORMAL_FLOW_YOLO"
             if effective_tier == VisionTier.TIER_1_YOLO_HIGHRES:
                 engine_name = f"YOLOv8 High-Res ({imgsz}px)"

@@ -262,14 +262,15 @@ class RealCameraFeed:
 
         # GIS Spatial Polygon Metadata & Ground Calibration
         gis_meta = {
-            "z1": {"name": "Zone A — Main Gate Plaza", "area_m2": 320.0, "w": 16.0, "h": 20.0},
-            "z2": {"name": "Zone B — East Corridor Choke", "area_m2": 95.0, "w": 5.0, "h": 19.0},
-            "z3": {"name": "Zone C — Central Stage Arena", "area_m2": 480.0, "w": 20.0, "h": 24.0},
-            "z4": {"name": "Zone D — North Exit Concourse", "area_m2": 240.0, "w": 12.0, "h": 20.0},
+            "z1": {"name": "Zone A — Main Gate Plaza", "area_m2": 320.0, "w": 16.0, "h": 20.0, "calib_area_m2": 11.5},
+            "z2": {"name": "Zone B — East Corridor Choke", "area_m2": 95.0, "w": 5.0, "h": 19.0, "calib_area_m2": 12.5},
+            "z3": {"name": "Zone C — Central Stage Arena", "area_m2": 480.0, "w": 20.0, "h": 24.0, "calib_area_m2": 12.0},
+            "z4": {"name": "Zone D — North Exit Concourse", "area_m2": 240.0, "w": 12.0, "h": 20.0, "calib_area_m2": 13.0},
         }
-        meta = gis_meta.get(self.zone_id, {"name": f"Zone {self.zone_id.upper()}", "area_m2": 95.0, "w": 10.0, "h": 10.0})
+        meta = gis_meta.get(self.zone_id, {"name": f"Zone {self.zone_id.upper()}", "area_m2": 95.0, "w": 10.0, "h": 10.0, "calib_area_m2": 12.0})
         self.zone_name = meta["name"]
         self.gis_area_m2 = gis_manager.zone_areas.get(self.zone_id, meta["area_m2"])
+        self.calib_area_m2 = meta.get("calib_area_m2", 12.0)
         self.world_w = meta["w"]
         self.world_h = meta["h"]
         self.fov_area_m2 = self.world_w * self.world_h
@@ -330,9 +331,10 @@ class RealCameraFeed:
                 res = vision_manager.process_frame(
                     frame_infer,
                     self.H_mat,
-                    self.gis_area_m2,
+                    self.calib_area_m2,
                     self.world_w,
-                    self.world_h
+                    self.world_h,
+                    cam_id=self.cam_id
                 )
             except Exception as e:
                 print(f"[VisionEngine] Inference error on {self.cam_id}: {e}")
@@ -482,18 +484,24 @@ class RealCameraFeed:
             zid = self.zone_id
             if zid in state["zones"]:
                 score, lvl = compute_risk(calc_density, calc_speed, calc_conflict)
+                ai_meta = auto_switch_ai_model(calc_density, count, self.zone_name)
+                total_zone_pax = int(round(calc_density * self.gis_area_m2))
+                is_crush = calc_density >= 5.0 or res.get("is_crush_regime", False)
                 state["zones"][zid].update({
                     "density": calc_density,
                     "speed": calc_speed,
                     "conflict": calc_conflict,
                     "risk": score,
                     "level": lvl,
-                    "personCount": count,
+                    "personCount": total_zone_pax,
+                    "camera_pax": count,
                     "gis_area_m2": self.gis_area_m2,
                     "fov_area_m2": self.fov_area_m2,
                     "gis_zone_name": self.zone_name,
-                    "vision_engine": res["engine_name"],
-                    "is_crush": res["is_crush_regime"]
+                    "vision_engine": ai_meta["short_name"],
+                    "ai_model": ai_meta,
+                    "ai_model_name": ai_meta["short_name"],
+                    "is_crush": is_crush
                 })
                 state["last_real_vision"] = time.time()
                 state["fps"] = round(self.fps, 1)
@@ -626,21 +634,34 @@ class RealCameraFeed:
                 alpha = 0.40
                 hud = cv2.addWeighted(heatmap, alpha, hud, 1.0 - alpha, 0)
 
-            box_color = (74, 222, 128) if dens < 2.0 else (234, 179, 8) if dens < 4.0 else (68, 68, 239)
+            box_color = (74, 222, 128) if dens < 1.8 else (24, 150, 245) if dens < 5.0 else (68, 68, 239)
 
-            # Draw 4-point GIS Calibrated Floor Perimeter (dashed cyan polygon)
-            poly_pts = self.img_corners.astype(np.int32).reshape((-1, 1, 2))
-            cv2.polylines(hud, [poly_pts], isClosed=True, color=(56, 189, 248), thickness=1, lineType=cv2.LINE_AA)
+            # Blend Continuous Thermal Heatmap for Very High Risk (Zone C / Crush)
+            if (dens >= 5.0 or is_crush) and len(boxes) > 0:
+                if heatmap is None:
+                    dmap = np.zeros((480, 640), dtype=np.float32)
+                    for b in boxes:
+                        cx, cy = int((b[0] + b[2]) / 2), int(b[1])
+                        if 0 <= cx < 640 and 0 <= cy < 480:
+                            cv2.circle(dmap, (cx, cy), 35, 1.0, -1)
+                    dmap = cv2.GaussianBlur(dmap, (45, 45), 0)
+                    norm_dmap = cv2.normalize(dmap, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                    heatmap = cv2.applyColorMap(norm_dmap, cv2.COLORMAP_JET)
+                if heatmap is not None:
+                    hud = cv2.addWeighted(heatmap, 0.40, hud, 0.60, 0)
 
-            if not is_crush:
-                for b in boxes:
-                    x1, y1, x2, y2 = map(int, b[:4])
-                    x1, y1 = max(0, min(639, x1)), max(0, min(479, y1))
-                    x2, y2 = max(0, min(639, x2)), max(0, min(479, y2))
-                    cv2.rectangle(hud, (x1, y1), (x2, y2), box_color, 1)
-                    # Ground foot point projected onto GIS plane
-                    foot_x = int((x1 + x2) / 2)
-                    cv2.circle(hud, (foot_x, y2), 3, (56, 189, 248), -1)
+            # Draw Tactical Bounding Boxes & P2PNet Head Dots
+            for b in boxes:
+                x1, y1, x2, y2 = map(int, b[:4])
+                x1, y1 = max(0, min(639, x1)), max(0, min(479, y1))
+                x2, y2 = max(0, min(639, x2)), max(0, min(479, y2))
+                cv2.rectangle(hud, (x1, y1), (x2, y2), box_color, 1)
+                # Cyan Head-Dot (crown of head) - P2PNet
+                head_x = int((x1 + x2) / 2)
+                head_y = int(y1 + (y2 - y1) * 0.12)
+                cv2.circle(hud, (head_x, head_y), 3, (248, 189, 56), -1)
+                # Ground foot point projected onto GIS plane
+                cv2.circle(hud, (head_x, y2), 3, (56, 189, 248), -1)
 
             # Draw Tactical Red Reticles around Fallen Persons (PCC Alert)
             for f in fallen:
@@ -1283,43 +1304,43 @@ def ensure_default_demo_cameras():
     demo_configs = [
         {
             "id": "CAM-01",
-            "name": "CAM-01: Main Gate Plaza",
+            "name": "CAM-01: Main Gate Plaza [LOW RISK]",
             "zone_id": "z1",
             "source": r"D:\crowdshield\test_videos\cam1_plaza.mp4",
-            "init_count": 210,
-            "init_density": 1.45,
-            "speed": 0.95,
-            "conflict": 0.12
+            "init_count": 333,
+            "init_density": 1.04,
+            "speed": 1.15,
+            "conflict": 0.08
         },
         {
             "id": "CAM-02",
-            "name": "CAM-02: East Corridor Choke",
+            "name": "CAM-02: East Corridor Choke [MEDIUM RISK]",
             "zone_id": "z2",
             "source": r"D:\crowdshield\test_videos\cam2_choke.mp4",
-            "init_count": 365,
-            "init_density": 3.84,
-            "speed": 0.45,
-            "conflict": 0.68
+            "init_count": 254,
+            "init_density": 2.67,
+            "speed": 0.55,
+            "conflict": 0.45
         },
         {
             "id": "CAM-03",
-            "name": "CAM-03: Central Stage Arena",
+            "name": "CAM-03: Central Stage Arena [VERY HIGH RISK]",
             "zone_id": "z3",
             "source": r"D:\crowdshield\test_videos\cam3_aerial.mp4",
-            "init_count": 2540,
-            "init_density": 5.30,
-            "speed": 0.22,
-            "conflict": 0.88
+            "init_count": 2558,
+            "init_density": 5.33,
+            "speed": 0.20,
+            "conflict": 0.85
         },
         {
             "id": "CAM-04",
-            "name": "CAM-04: North Choke Approach",
+            "name": "CAM-04: North Exit Concourse [SAFE]",
             "zone_id": "z4",
             "source": r"D:\crowdshield\test_videos\cam4_approach.mp4",
-            "init_count": 576,
-            "init_density": 2.40,
-            "speed": 0.85,
-            "conflict": 0.25
+            "init_count": 240,
+            "init_density": 1.00,
+            "speed": 1.10,
+            "conflict": 0.10
         }
     ]
 
