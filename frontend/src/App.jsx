@@ -22,6 +22,12 @@ const DEFAULT_ZONES = [
     name: 'Zone A — Main Gate Plaza',
     shortName: 'Zone A',
     capacity: 450,
+    density: 0.0,
+    currentDensity: 0.0,
+    personCount: 0,
+    level: 0,
+    speed: 0.0,
+    flowRate: 0.0,
     warningThreshold: 3.0,
     criticalThreshold: 4.5,
     exits: ['Gate A (Main Portal)', 'West Ramp'],
@@ -33,6 +39,12 @@ const DEFAULT_ZONES = [
     name: 'Zone B — East Corridor Choke',
     shortName: 'Zone B',
     capacity: 120,
+    density: 0.0,
+    currentDensity: 0.0,
+    personCount: 0,
+    level: 0,
+    speed: 0.0,
+    flowRate: 0.0,
     warningThreshold: 3.0,
     criticalThreshold: 4.5,
     exits: ['Gate B (North Exit)', 'Gate C (South Relief)'],
@@ -44,6 +56,12 @@ const DEFAULT_ZONES = [
     name: 'Zone C — Central Stage Arena',
     shortName: 'Zone C',
     capacity: 700,
+    density: 0.0,
+    currentDensity: 0.0,
+    personCount: 0,
+    level: 0,
+    speed: 0.0,
+    flowRate: 0.0,
     warningThreshold: 3.2,
     criticalThreshold: 4.5,
     exits: ['Gate C (South Relief)', 'Gate B'],
@@ -55,6 +73,12 @@ const DEFAULT_ZONES = [
     name: 'Zone D — North Exit Concourse',
     shortName: 'Zone D',
     capacity: 350,
+    density: 0.0,
+    currentDensity: 0.0,
+    personCount: 0,
+    level: 0,
+    speed: 0.0,
+    flowRate: 0.0,
     warningThreshold: 3.0,
     criticalThreshold: 4.5,
     exits: ['Gate B (North Emergency Exit)'],
@@ -217,6 +241,12 @@ export default function App() {
   });
   const [hoverCoords, setHoverCoords] = useState(null);
   const geojsonInputRef = useRef(null);
+
+  // GIS Emergency Hazard Isolation & LoRa Broadcast State
+  const [activeHazards, setActiveHazards] = useState({ has_hazard: false, isolated_zones: {} });
+  const [hazardBroadcasts, setHazardBroadcasts] = useState([]);
+  const [selectedHazardZone, setSelectedHazardZone] = useState('z2');
+  const [selectedHazardType, setSelectedHazardType] = useState('FIRE');
 
   // Dynamic GIS Coordinate Projector (Projects GPS or Metric GeoJSON -> SVG Canvas 640x365)
   const gisProjector = useMemo(() => {
@@ -979,6 +1009,44 @@ export default function App() {
     }
   };
 
+  const handleTriggerHazard = async (zoneId, hazardType) => {
+    try {
+      const res = await fetch('http://localhost:8000/api/hazard/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          zone_id: zoneId || 'z2',
+          hazard_type: hazardType || 'FIRE',
+          severity: 'CRITICAL'
+        })
+      });
+      const data = await res.json();
+      if (data.active_hazards) setActiveHazards(data.active_hazards);
+      if (data.broadcasts) setHazardBroadcasts(data.broadcasts);
+      if (data.routes) setRoutes(data.routes);
+      if (data.gis_routing) setGisRouting(data.gis_routing);
+    } catch (err) {
+      console.error('Failed to trigger hazard:', err);
+    }
+  };
+
+  const handleClearHazard = async (zoneId = null) => {
+    try {
+      const res = await fetch('http://localhost:8000/api/hazard/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zone_id: zoneId })
+      });
+      const data = await res.json();
+      if (data.active_hazards) setActiveHazards(data.active_hazards);
+      if (data.broadcasts) setHazardBroadcasts(data.broadcasts);
+      if (data.routes) setRoutes(data.routes);
+      if (data.gis_routing) setGisRouting(data.gis_routing);
+    } catch (err) {
+      console.error('Failed to clear hazard:', err);
+    }
+  };
+
   // Helper Fruin Risk Colors (Minimal, functional, high-contrast)
   const getFruinBadge = (level, density) => {
     switch (level) {
@@ -1193,9 +1261,14 @@ export default function App() {
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {(() => {
                   const totalPax = cameras.reduce((sum, c) => sum + (c.person_count || 0), 0);
-                  const highestDensityZone = zones.reduce((prev, curr) => (curr.density > prev.density ? curr : prev), zones[0]);
+                  const highestDensityZone = zones.reduce((prev, curr) => {
+                    const cD = curr?.density ?? curr?.currentDensity ?? 0;
+                    const pD = prev?.density ?? prev?.currentDensity ?? 0;
+                    return cD > pD ? curr : prev;
+                  }, zones[0] || {});
+                  const peakDensity = highestDensityZone?.density ?? highestDensityZone?.currentDensity ?? 0;
                   const onlineNodesCount = nodes.filter((n) => n.status === 'ONLINE').length;
-                  const badge = getFruinBadge(highestDensityZone.level, highestDensityZone.density);
+                  const badge = getFruinBadge(highestDensityZone?.level || 0, peakDensity);
 
                   return (
                     <>
@@ -1209,7 +1282,7 @@ export default function App() {
                         <Activity className="w-3.5 h-3.5 text-amber-400" />
                         <span className="text-zinc-400">Peak Congestion:</span>
                         <span className={`font-bold ${badge.text}`}>
-                          {highestDensityZone.name.split('—')[0].trim()} ({highestDensityZone.density.toFixed(2)} p/m²)
+                          {(highestDensityZone?.name || 'Zone A').split('—')[0].split('-')[0].trim()} ({Number(peakDensity).toFixed(2)} p/m²)
                         </span>
                       </div>
 
@@ -1259,8 +1332,8 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {cameras.map((cam) => {
                   const zKey = cam.zone_id ? cam.zone_id.toLowerCase().replace('zone-', '') : 'z1';
-                  const zoneObj = zones.find((z) => z.key === zKey || z.id === cam.zone_id) || zones[0];
-                  const badge = getFruinBadge(zoneObj.level, cam.density);
+                  const zoneObj = (zones && zones.find((z) => z.key === zKey || z.id === cam.zone_id)) || zones[0] || {};
+                  const badge = getFruinBadge(zoneObj?.level || 0, cam?.density || 0);
 
                   return (
                     <div
@@ -1657,7 +1730,7 @@ export default function App() {
                     return zones.map((z) => {
                       const { x, y, w, h } = z.svgBounds || { x: 40, y: 95, w: 185, h: 165 };
                       const isSelected = selectedZoneKey === z.key;
-                      const badge = getFruinBadge(z.level, z.currentDensity);
+                      const badge = getFruinBadge(z?.level || 0, z?.currentDensity || 0);
 
                       let fillColor = '#09090b';
                       if (z.level === 3) fillColor = 'rgba(153, 27, 27, 0.45)';
@@ -1680,7 +1753,7 @@ export default function App() {
                             {z.shortName} <tspan fill="#71717a" fontSize="8.5">[{z.key.toUpperCase()}]</tspan>
                           </text>
                           <text x={x + 10} y={y + 32} fill={z.level >= 2 ? '#f87171' : '#34d399'} fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                            {z.personCount || 0} PAX • {z.currentDensity.toFixed(2)} p/m²
+                            {z.personCount || 0} PAX • {(z.currentDensity ?? z.density ?? 0).toFixed(2)} p/m²
                           </text>
                           <text x={x + 10} y={y + 45} fill="#94a3b8" fontSize="8" fontFamily="monospace">
                             GIS Area: {z.key === 'z1' ? '320' : z.key === 'z2' ? '95' : z.key === 'z3' ? '480' : '240'} m² • {badge.label}
@@ -2037,10 +2110,10 @@ export default function App() {
 
                 {/* Live GIS & Physics Metrics */}
                 {(() => {
-                  const currZ = zones.find((z) => z.key === selectedZoneKey) || zones[0];
+                  const currZ = (zones && zones.length > 0 ? (zones.find((z) => z.key === selectedZoneKey) || zones[0]) : null) || { key: 'z1', name: 'Zone A', personCount: 0, capacity: 100, currentDensity: 0, density: 0, level: 0, speed: 0, flowRate: 0, conflict: 'Low' };
                   const routeInfo = routes[selectedZoneKey];
                   const fc = forecasts[selectedZoneKey] || { t10: 0, t15: 0, p_critical: 0 };
-                  const badge = getFruinBadge(currZ.level, currZ.currentDensity);
+                  const badge = getFruinBadge(currZ?.level || 0, currZ?.currentDensity || 0);
                   const gisArea = selectedZoneKey === 'z1' ? 320 : selectedZoneKey === 'z2' ? 95 : selectedZoneKey === 'z3' ? 480 : 240;
 
                   return (
@@ -2052,7 +2125,7 @@ export default function App() {
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-500 block">DESIGN CAPACITY</span>
-                          <span className="text-sm font-bold text-zinc-300">{currZ.capacity} pax</span>
+                          <span className="text-sm font-bold text-zinc-300">{currZ.capacity || 100} pax</span>
                         </div>
                       </div>
 
@@ -2066,10 +2139,10 @@ export default function App() {
                           <span className="text-[9px] text-zinc-500">Shapely Metric Area</span>
                         </div>
                         <div className="text-zinc-300 text-xs py-1">
-                          Density = <span className="text-white font-bold">{currZ.personCount || 0} PAX</span> (YOLOv8) ÷ <span className="text-emerald-400 font-bold">{gisArea} m²</span> (GIS Polygon) = <span className={`font-bold ${badge.text}`}>{currZ.currentDensity.toFixed(2)} pax/m²</span>
+                          Density = <span className="text-white font-bold">{currZ.personCount || 0} PAX</span> (YOLOv8) ÷ <span className="text-emerald-400 font-bold">{gisArea} m²</span> (GIS Polygon) = <span className={`font-bold ${badge.text}`}>{(currZ?.currentDensity ?? currZ?.density ?? 0).toFixed(2)} pax/m²</span>
                         </div>
                         <div className="text-[10px] text-zinc-500 border-t border-zinc-900 pt-1 flex justify-between">
-                          <span>Capacity Saturation: {Math.round(((currZ.personCount || 0) / currZ.capacity) * 100)}%</span>
+                          <span>Capacity Saturation: {Math.round(((currZ.personCount || 0) / (currZ.capacity || 1)) * 100)}%</span>
                           <span>Fruin LoS: {badge.label}</span>
                         </div>
                       </div>
@@ -2077,7 +2150,7 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2 p-2 rounded bg-black border border-zinc-900">
                         <div>
                           <span className="text-[9px] text-zinc-500 block">TRUE DENSITY (PAX/M²)</span>
-                          <span className={`text-base font-bold ${badge.text}`}>{currZ.currentDensity.toFixed(2)} p/m²</span>
+                          <span className={`text-base font-bold ${badge.text}`}>{(currZ?.currentDensity ?? currZ?.density ?? 0).toFixed(2)} p/m²</span>
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-500 block">FRUIN LEVEL OF SERVICE</span>
@@ -2088,11 +2161,11 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2 p-2 rounded bg-black border border-zinc-900">
                         <div>
                           <span className="text-[9px] text-zinc-500 block">WALK VELOCITY</span>
-                          <span className="text-zinc-200">{currZ.speed} m/s</span>
+                          <span className="text-zinc-200">{currZ.speed || 0} m/s</span>
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-500 block">TURBULENCE CONFLICT</span>
-                          <span className="text-zinc-200">{currZ.conflict}</span>
+                          <span className="text-zinc-200">{currZ.conflict || 'Low'}</span>
                         </div>
                       </div>
 
@@ -2180,8 +2253,8 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {cameras.map((cam) => {
                   const zKey = cam.zone_id ? cam.zone_id.toLowerCase().replace('zone-', '') : 'z1';
-                  const zoneObj = zones.find((z) => z.key === zKey || z.id === cam.zone_id) || zones[0];
-                  const badge = getFruinBadge(zoneObj.level, cam.density);
+                  const zoneObj = (zones && zones.find((z) => z.key === zKey || z.id === cam.zone_id)) || zones[0] || {};
+                  const badge = getFruinBadge(zoneObj?.level || 0, cam?.density || 0);
 
                   return (
                     <div
@@ -2581,7 +2654,7 @@ export default function App() {
                     return zones.map((z) => {
                       const { x, y, w, h } = z.svgBounds || { x: 40, y: 95, w: 185, h: 165 };
                       const isSelected = selectedZoneKey === z.key;
-                      const badge = getFruinBadge(z.level, z.currentDensity);
+                      const badge = getFruinBadge(z?.level || 0, z?.currentDensity || 0);
 
                       let fillColor = '#09090b';
                       if (z.level === 3) fillColor = 'rgba(153, 27, 27, 0.45)';
@@ -2604,7 +2677,7 @@ export default function App() {
                             {z.shortName} <tspan fill="#71717a" fontSize="8.5">[{z.key.toUpperCase()}]</tspan>
                           </text>
                           <text x={x + 10} y={y + 32} fill={z.level >= 2 ? '#f87171' : '#34d399'} fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                            {z.personCount || 0} PAX • {z.currentDensity.toFixed(2)} p/m²
+                            {z.personCount || 0} PAX • {(z.currentDensity ?? z.density ?? 0).toFixed(2)} p/m²
                           </text>
                           <text x={x + 10} y={y + 45} fill="#94a3b8" fontSize="8" fontFamily="monospace">
                             GIS Area: {z.key === 'z1' ? '320' : z.key === 'z2' ? '95' : z.key === 'z3' ? '480' : '240'} m² • {badge.label}
@@ -2963,10 +3036,10 @@ export default function App() {
 
                 {/* Live GIS & Physics Metrics */}
                 {(() => {
-                  const currZ = zones.find((z) => z.key === selectedZoneKey) || zones[0];
+                  const currZ = (zones && zones.length > 0 ? (zones.find((z) => z.key === selectedZoneKey) || zones[0]) : null) || { key: 'z1', name: 'Zone A', personCount: 0, capacity: 100, currentDensity: 0, density: 0, level: 0, speed: 0, flowRate: 0, conflict: 'Low' };
                   const routeInfo = routes[selectedZoneKey];
                   const fc = forecasts[selectedZoneKey] || { t10: 0, t15: 0, p_critical: 0 };
-                  const badge = getFruinBadge(currZ.level, currZ.currentDensity);
+                  const badge = getFruinBadge(currZ?.level || 0, currZ?.currentDensity || 0);
                   const gisArea = selectedZoneKey === 'z1' ? 320 : selectedZoneKey === 'z2' ? 95 : selectedZoneKey === 'z3' ? 480 : 240;
 
                   return (
@@ -2978,7 +3051,7 @@ export default function App() {
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-500 block">DESIGN CAPACITY</span>
-                          <span className="text-sm font-bold text-zinc-300">{currZ.capacity} pax</span>
+                          <span className="text-sm font-bold text-zinc-300">{currZ.capacity || 100} pax</span>
                         </div>
                       </div>
 
@@ -2992,10 +3065,10 @@ export default function App() {
                           <span className="text-[9px] text-zinc-500">Shapely Metric Area</span>
                         </div>
                         <div className="text-zinc-300 text-xs py-1">
-                          Density = <span className="text-white font-bold">{currZ.personCount || 0} PAX</span> (YOLOv8) ÷ <span className="text-emerald-400 font-bold">{gisArea} m²</span> (GIS Polygon) = <span className={`font-bold ${badge.text}`}>{currZ.currentDensity.toFixed(2)} pax/m²</span>
+                          Density = <span className="text-white font-bold">{currZ.personCount || 0} PAX</span> (YOLOv8) ÷ <span className="text-emerald-400 font-bold">{gisArea} m²</span> (GIS Polygon) = <span className={`font-bold ${badge.text}`}>{(currZ?.currentDensity ?? currZ?.density ?? 0).toFixed(2)} pax/m²</span>
                         </div>
                         <div className="text-[10px] text-zinc-500 border-t border-zinc-900 pt-1 flex justify-between">
-                          <span>Capacity Saturation: {Math.round(((currZ.personCount || 0) / currZ.capacity) * 100)}%</span>
+                          <span>Capacity Saturation: {Math.round(((currZ.personCount || 0) / (currZ.capacity || 1)) * 100)}%</span>
                           <span>Fruin LoS: {badge.label}</span>
                         </div>
                       </div>
@@ -3003,7 +3076,7 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2 p-2 rounded bg-black border border-zinc-900">
                         <div>
                           <span className="text-[9px] text-zinc-500 block">TRUE DENSITY (PAX/M²)</span>
-                          <span className={`text-base font-bold ${badge.text}`}>{currZ.currentDensity.toFixed(2)} p/m²</span>
+                          <span className={`text-base font-bold ${badge.text}`}>{(currZ?.currentDensity ?? currZ?.density ?? 0).toFixed(2)} p/m²</span>
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-500 block">FRUIN LEVEL OF SERVICE</span>
@@ -3014,11 +3087,11 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2 p-2 rounded bg-black border border-zinc-900">
                         <div>
                           <span className="text-[9px] text-zinc-500 block">WALK VELOCITY</span>
-                          <span className="text-zinc-200">{currZ.speed} m/s</span>
+                          <span className="text-zinc-200">{currZ.speed || 0} m/s</span>
                         </div>
                         <div>
                           <span className="text-[9px] text-zinc-500 block">TURBULENCE CONFLICT</span>
-                          <span className="text-zinc-200">{currZ.conflict}</span>
+                          <span className="text-zinc-200">{currZ.conflict || 'Low'}</span>
                         </div>
                       </div>
 
