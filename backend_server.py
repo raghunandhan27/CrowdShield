@@ -2011,9 +2011,10 @@ async def analyze_kumbh_frame_endpoint(
             density_map[h2:h, w2:w]    # z4: Bottom-Right
         ]
         # Calibrated sector area = 24.0 m^2
+        zone_densities_list = [round(float(np.sum(q)) / 24.0, 2) for q in quadrants]
         zone_densities = {
-            f"z{i+1}": round(float(np.sum(q)) / 24.0, 2)
-            for i, q in enumerate(quadrants)
+            f"z{i+1}": zone_densities_list[i]
+            for i in range(len(quadrants))
         }
 
         # Determine regime
@@ -2042,8 +2043,10 @@ async def analyze_kumbh_frame_endpoint(
             "zero_cloud_dependency": True,
             "total_count": int(round(total_count)),
             "zone_densities": zone_densities,
+            "zone_densities_list": zone_densities_list,
             "regime": regime,
             "is_crush_regime": max_density >= 2.5,
+            "density_heatmap": b64_heatmap,
             "heatmap_preview": b64_heatmap
         }
     except Exception as e:
