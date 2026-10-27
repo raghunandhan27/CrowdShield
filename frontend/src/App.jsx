@@ -173,6 +173,290 @@ const INSTRUCTION_PRESETS = [
   }
 ];
 
+
+// ============================================================================
+// AUTOMATIC FIRE DETECTION, NETWORKX REROUTING & OLED SIGNBOARD MATRIX PANEL
+// ============================================================================
+function EmergencyHazardPanel({
+  activeHazards,
+  hazardBroadcasts,
+  selectedHazardZone,
+  setSelectedHazardZone,
+  selectedHazardType,
+  setSelectedHazardType,
+  handleTriggerHazard,
+  handleClearHazard,
+  routes
+}) {
+  const isHazardActive = Boolean(activeHazards?.has_hazard);
+  const isolatedKeys = Object.keys(activeHazards?.isolated_zones || {});
+
+  // Pre-generate 4-node signboard displays with live broadcast overlay
+  const displayNodes = useMemo(() => {
+    const list = [
+      { z_num: 1, zone_id: 'z1', name: 'Zone A (Main Plaza)', defaultExit: 'GATE A' },
+      { z_num: 2, zone_id: 'z2', name: 'Zone B (East Choke)', defaultExit: 'GATE B' },
+      { z_num: 3, zone_id: 'z3', name: 'Zone C (South Bridge)', defaultExit: 'GATE C' },
+      { z_num: 4, zone_id: 'z4', name: 'Zone D (North Choke)', defaultExit: 'GATE B' }
+    ];
+
+    return list.map(item => {
+      const liveBroadcast = (hazardBroadcasts || []).find(b => 
+        (b.zone_id && b.zone_id.toLowerCase() === item.zone_id) || 
+        b.z_num === item.z_num
+      );
+      const routeInfo = routes ? routes[item.zone_id] : null;
+      const isCompromised = isolatedKeys.includes(item.zone_id);
+
+      if (liveBroadcast) {
+        return {
+          ...item,
+          level: liveBroadcast.level || 3,
+          header: liveBroadcast.header || (isCompromised ? `FIRE ALERT HERE (${item.zone_id.toUpperCase()})!` : `FIRE IN ${isolatedKeys[0]?.toUpperCase() || 'Z2'}! AVOID`),
+          route: liveBroadcast.route || (isCompromised ? 'EVACUATE DIRECT' : `SAFE ROUTE: ${routeInfo?.target_exit || item.defaultExit}`),
+          arrow: liveBroadcast.arrow || (item.z_num === 1 ? '◀ GATE A' : 'GATE B ▶'),
+          exit: liveBroadcast.exit || routeInfo?.target_exit || item.defaultExit,
+          raw_serial: liveBroadcast.raw_serial || liveBroadcast.pipe_payload || `${item.z_num}|3|${liveBroadcast.header}|${liveBroadcast.route}`,
+          isCompromised
+        };
+      }
+
+      if (isHazardActive) {
+        const fireZ = isolatedKeys[0]?.toUpperCase() || 'HAZARD';
+        return {
+          ...item,
+          level: isCompromised ? 3 : 2,
+          header: isCompromised ? `FIRE ALERT HERE (${item.zone_id.toUpperCase()})!` : `FIRE IN ${fireZ}! AVOID ${fireZ}`,
+          route: isCompromised ? 'EVACUATE DIRECT' : `SAFE ROUTE: ${routeInfo?.target_exit || item.defaultExit}`,
+          arrow: item.z_num === 1 ? '◀ GATE A' : 'GATE B ▶',
+          exit: routeInfo?.target_exit || item.defaultExit,
+          raw_serial: `${item.z_num}|3|${isCompromised ? 'FIRE HERE' : 'AVOID FIRE'}|SAFE: ${routeInfo?.target_exit || item.defaultExit}`,
+          isCompromised
+        };
+      }
+
+      return {
+        ...item,
+        level: 1,
+        header: 'STATUS: NORMAL',
+        route: `EGRESS: ${item.defaultExit}`,
+        arrow: item.z_num === 1 ? '◀ GATE A' : 'GATE B ▶',
+        exit: item.defaultExit,
+        raw_serial: `${item.z_num}|1|NORMAL OPERATION|FOLLOW SIGNS`,
+        isCompromised: false
+      };
+    });
+  }, [hazardBroadcasts, activeHazards, routes, isolatedKeys, isHazardActive]);
+
+  return (
+    <div className="bg-zinc-950 border border-red-900/60 rounded-lg p-3.5 space-y-3 font-mono shadow-xl">
+      {/* Panel Header */}
+      <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+        <div className="flex items-center gap-2">
+          <Flame className={`w-4 h-4 ${isHazardActive ? 'text-red-500 animate-pulse' : 'text-zinc-500'}`} />
+          <span className="text-xs font-bold text-white uppercase tracking-wider">
+            Automatic Fire Incident Isolation &amp; Safest Route Recalculation
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-950 border border-red-800 text-red-300 font-bold">
+            LoRa 433MHz • ESP-NOW
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-emerald-400">
+            KY-026 Flame Sensor (GPIO 35)
+          </span>
+        </div>
+      </div>
+
+      {/* 1-Click Fire Simulation Drill Buttons */}
+      <div className="space-y-1.5">
+        <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wide flex items-center justify-between">
+          <span>Instant Emergency Drill Simulators (Dijkstra Hazard-Aware Rerouting):</span>
+          <span className="text-zinc-500 text-[9px]">1-Click Trigger / Reset</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleTriggerHazard('z2', 'FIRE')}
+            className={`py-1.5 px-2 rounded text-[11px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              isolatedKeys.includes('z2')
+                ? 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+                : 'bg-red-950/70 hover:bg-red-900 border-red-800/80 text-red-200'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5 text-orange-400 animate-pulse" />
+            <span>🔥 FIRE: ZONE B</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTriggerHazard('z1', 'FIRE')}
+            className={`py-1.5 px-2 rounded text-[11px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              isolatedKeys.includes('z1')
+                ? 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+                : 'bg-red-950/70 hover:bg-red-900 border-red-800/80 text-red-200'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5 text-orange-400 animate-pulse" />
+            <span>🔥 FIRE: ZONE A</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTriggerHazard('z3', 'FIRE')}
+            className={`py-1.5 px-2 rounded text-[11px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              isolatedKeys.includes('z3')
+                ? 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+                : 'bg-red-950/70 hover:bg-red-900 border-red-800/80 text-red-200'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5 text-orange-400 animate-pulse" />
+            <span>🔥 FIRE: ZONE C</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleClearHazard(null)}
+            className="py-1.5 px-2 rounded text-[11px] font-bold border bg-emerald-950/70 hover:bg-emerald-900 border-emerald-800 text-emerald-200 transition flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>✅ ALL CLEAR</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Active Hazard Emergency Instruction Banner */}
+      {isHazardActive && (
+        <div className="p-3 rounded-lg bg-red-950/90 border border-red-600 text-xs space-y-2.5 animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.3)]">
+          <div className="flex items-center justify-between text-red-200 font-bold">
+            <span className="flex items-center gap-2 text-sm text-red-300">
+              <AlertTriangle className="w-4 h-4 text-red-400 animate-bounce" />
+              CRITICAL FIRE DETECTED: {isolatedKeys.map(z => z.toUpperCase()).join(', ')} COMPROMISED!
+            </span>
+            <span className="text-[10px] bg-red-900 text-white px-2 py-0.5 rounded border border-red-500 font-bold">
+              EDGE COST = ∞ (LOCKED)
+            </span>
+          </div>
+
+          <div className="bg-black/70 p-2.5 rounded border border-red-800/80 space-y-1.5 text-[11px]">
+            <div className="text-amber-300 font-bold flex items-center gap-1.5">
+              <span>📢 LIVE EVACUATION INSTRUCTIONS BROADCAST:</span>
+            </div>
+            {displayNodes.map(n => (
+              <div key={n.zone_id} className="flex items-center justify-between font-mono">
+                <span className={n.isCompromised ? 'text-red-400 font-bold' : 'text-zinc-300'}>
+                  • {n.name}: {n.isCompromised ? '⚠️ FIRE LOCATION! DO NOT ENTER. EVACUATE DIRECT TO SAFETY' : `Safe egress via ${n.exit}`}
+                </span>
+                <span className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold ${n.isCompromised ? 'bg-red-950 text-red-300 border border-red-700' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'}`}>
+                  {n.isCompromised ? 'PERIMETER LOCKED' : `ROUTED → ${n.exit}`}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-zinc-400 leading-tight">
+            NetworkX dynamic pathfinding has isolated the fire sector. All adjacent corridors are set to cost ∞. Safe exit vectors are actively calculated and pushed via Gateway USB Serial.
+          </p>
+        </div>
+      )}
+
+      {/* Physical Digital Signboards (SSD1306 OLED Display Simulator Cards) */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 uppercase">
+          <span>Physical Zonal Node Digital Signboards (SSD1306 0.96" OLED • 128x64 I2C):</span>
+          <span className="text-zinc-500 text-[9px]">UART / Serial: 115200 Baud</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          {displayNodes.map((n) => (
+            <div
+              key={n.zone_id}
+              className={`rounded-lg p-2.5 font-mono text-[10px] space-y-1.5 transition border ${
+                n.isCompromised
+                  ? 'bg-zinc-950 border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
+                  : isHazardActive
+                  ? 'bg-zinc-950 border-cyan-500/80 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+                  : 'bg-zinc-950 border-zinc-800'
+              }`}
+            >
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
+                <span className="text-cyan-400 font-bold">NODE {n.z_num} [{n.zone_id.toUpperCase()}]</span>
+                <span className={`text-[8.5px] px-1 py-0.2 rounded ${n.isCompromised ? 'bg-red-900 text-white' : 'bg-zinc-900 text-zinc-400'}`}>
+                  {n.isCompromised ? '🔥 HAZARD' : 'OLED 0x3C'}
+                </span>
+              </div>
+              <div className="bg-black border border-zinc-900 rounded p-1.5 space-y-0.5 text-center">
+                <div className={`font-bold text-[10.5px] truncate ${n.isCompromised ? 'text-red-400 animate-pulse' : 'text-amber-400'}`}>
+                  {n.header}
+                </div>
+                <div className={`font-bold text-[10px] truncate ${n.isCompromised ? 'text-red-300' : 'text-emerald-400'}`}>
+                  {n.route}
+                </div>
+                <div className="text-[9px] text-zinc-400 flex items-center justify-center gap-1 pt-0.5 border-t border-zinc-900">
+                  <span className="text-emerald-400 font-bold">{n.arrow}</span>
+                  <span className="text-zinc-600">|</span>
+                  <span className="text-zinc-400 text-[8.5px]">LED: {n.z_num === 1 ? 'GPIO 18' : 'GPIO 19'}</span>
+                </div>
+              </div>
+              <div className="text-[8px] text-zinc-600 truncate font-mono" title={n.raw_serial}>
+                TX: {n.raw_serial}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Manual Sector Hazard Controls & Custom Override */}
+      <div className="pt-2 border-t border-zinc-900 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+        <div>
+          <label className="text-[10px] text-zinc-400 block mb-1">SELECT SECTOR FOR OVERRIDE</label>
+          <select
+            value={selectedHazardZone}
+            onChange={(e) => setSelectedHazardZone(e.target.value)}
+            className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
+          >
+            <option value="z2">Zone 2 (East Choke - Zone B)</option>
+            <option value="z1">Zone 1 (Main Plaza - Zone A)</option>
+            <option value="z3">Zone 3 (South Bridge - Zone C)</option>
+            <option value="z4">Zone 4 (North Choke - Zone D)</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-zinc-400 block mb-1">HAZARD SEVERITY / NATURE</label>
+          <select
+            value={selectedHazardType}
+            onChange={(e) => setSelectedHazardType(e.target.value)}
+            className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
+          >
+            <option value="FIRE">🔥 Fire Outbreak (Flame / Smoke)</option>
+            <option value="CRITICAL HAZARD">⚠️ Critical Density Surge / Stampede Risk</option>
+            <option value="STRUCTURAL">💥 Structural Obstruction / Wall Collapse</option>
+          </select>
+        </div>
+        <div className="flex items-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleTriggerHazard(selectedHazardZone, selectedHazardType)}
+            className="flex-1 py-1.5 px-2 rounded bg-red-950 hover:bg-red-900 border border-red-700 text-red-200 text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+          >
+            <Flame className="w-3.5 h-3.5 text-red-400" />
+            <span>ISOLATE &amp; REROUTE</span>
+          </button>
+          {isHazardActive && (
+            <button
+              type="button"
+              onClick={() => handleClearHazard(null)}
+              title="Restore standard paths & send all-clear"
+              className="py-1.5 px-2 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 text-[11px] font-bold flex items-center justify-center gap-1 transition shrink-0 cursor-pointer"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>CLEAR</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   // Consolidated 3-Hub Navigation: 'OPERATIONS' | 'INCIDENTS' | 'HARDWARE'
   const [activeTab, setActiveTab] = useState('OPERATIONS');
@@ -2121,10 +2405,23 @@ export default function App() {
                           <g key={zid} onClick={() => setSelectedZoneKey(zid)} className="cursor-pointer">
                             <polygon
                               points={pointsStr}
-                              fill={isIsolated ? '#dc2626' : fillColor}
-                              stroke={isSelected ? '#ffffff' : strokeColor}
-                              strokeWidth={isSelected ? '2.5' : '1.5'}
+                              fill={isIsolated ? 'rgba(220, 38, 38, 0.65)' : fillColor}
+                              stroke={isIsolated ? '#ef4444' : isSelected ? '#ffffff' : strokeColor}
+                              strokeWidth={isIsolated ? '3' : isSelected ? '2.5' : '1.5'}
+                              strokeDasharray={isIsolated ? '6 3' : 'none'}
                             />
+                            {isIsolated && (
+                              <g>
+                                <circle cx={cx} cy={cy} r="26" fill="rgba(239, 68, 68, 0.35)">
+                                  <animate attributeName="r" values="18;34;18" dur="1.3s" repeatCount="indefinite" />
+                                  <animate attributeName="opacity" values="0.9;0.2;0.9" dur="1.3s" repeatCount="indefinite" />
+                                </circle>
+                                <rect x={cx - 62} y={cy - 28} width="124" height="20" rx="4" fill="#991b1b" stroke="#fca5a5" strokeWidth="1.5" />
+                                <text x={cx} y={cy - 14} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                                  🔥 FIRE HAZARD ZONE
+                                </text>
+                              </g>
+                            )}
                             {/* Centered Tactical Telemetry */}
                             <text x={cx} y={cy - 10} textAnchor="middle" fill="#ffffff" fontSize="10.5" fontFamily="monospace" fontWeight="bold">
                               {z.shortName || z.name} <tspan fill="#a1a1aa" fontSize="8.5">[{zid.toUpperCase()}]</tspan>
@@ -2282,7 +2579,21 @@ export default function App() {
                               strokeWidth="2"
                               strokeDasharray={isIsolated ? '4 4' : '6 3'}
                             />
-                            <circle cx={endPt.x} cy={endPt.y} r="3" fill={isIsolated ? '#ef4444' : '#10b981'} />
+                            <circle cx={endPt.x} cy={endPt.y} r="3.5" fill={isIsolated ? '#ef4444' : '#10b981'} />
+                            {isIsolated ? (
+                              <g>
+                                <circle cx={Math.round((startPt.x + endPt.x)/2)} cy={Math.round((startPt.y + endPt.y)/2)} r="9" fill="#991b1b" stroke="#f87171" strokeWidth="1" />
+                                <text x={Math.round((startPt.x + endPt.x)/2)} y={Math.round((startPt.y + endPt.y)/2 + 3)} textAnchor="middle" fill="#ffffff" fontSize="7" fontFamily="monospace" fontWeight="bold">
+                                  ⛔
+                                </text>
+                              </g>
+                            ) : (
+                              <g>
+                                <text x={Math.round((startPt.x + endPt.x)/2)} y={Math.round((startPt.y + endPt.y)/2 - 5)} textAnchor="middle" fill="#34d399" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+                                  &gt;&gt;&gt; SAFE: {(rInfo?.target_exit || rInfo?.exit || 'GATE').toUpperCase()}
+                                </text>
+                              </g>
+                            )}
                           </g>
                         );
                       });
@@ -2355,6 +2666,61 @@ export default function App() {
                     </g>
                   )}
 
+                  
+                  {/* Venue Emergency Exits & Evacuation Gates */}
+                  {gisLayers.gates && (() => {
+                    const customGates = (gisMaster?.features || []).filter((f) => f.geometry?.type === 'Point');
+                    const defaultGates = [
+                      { id: 'gate_a', name: 'GATE A', desc: 'Main Portal / West', x: 32, y: 192 },
+                      { id: 'gate_b', name: 'GATE B', desc: 'Arterial / East Exit', x: 601, y: 202 },
+                      { id: 'gate_c', name: 'GATE C', desc: 'North Relief Portal', x: 317, y: 20 }
+                    ];
+
+                    const gatesToRender = (gisProjector && customGates.length > 0)
+                      ? customGates.map(g => {
+                          const pt = gisProjector.project(g.geometry.coordinates);
+                          const gid = (g.id || g.properties?.id || '').toLowerCase();
+                          return {
+                            id: gid,
+                            name: g.properties?.name || gid.toUpperCase(),
+                            desc: 'Emergency Exit',
+                            x: pt.x,
+                            y: pt.y
+                          };
+                        })
+                      : defaultGates;
+
+                    return gatesToRender.map(gate => {
+                      const isTargetSafeExit = Object.values(routes || {}).some(r => 
+                        (r.target_exit || r.exit || '').toLowerCase().includes(gate.id.toLowerCase())
+                      );
+
+                      return (
+                        <g key={`gate-portal-${gate.id}`}>
+                          {isTargetSafeExit && (
+                            <circle cx={gate.x} cy={gate.y} r="18" fill="rgba(16, 185, 129, 0.25)">
+                              <animate attributeName="r" values="10;22;10" dur="1.8s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.8s" repeatCount="indefinite" />
+                            </circle>
+                          )}
+                          <rect
+                            x={gate.x - 30}
+                            y={gate.y - 12}
+                            width="60"
+                            height="24"
+                            rx="4"
+                            fill={isTargetSafeExit ? '#064e3b' : '#14532d'}
+                            stroke={isTargetSafeExit ? '#34d399' : '#10b981'}
+                            strokeWidth={isTargetSafeExit ? '2' : '1'}
+                          />
+                          <text x={gate.x} y={gate.y + 3} textAnchor="middle" fill="#ecfdf5" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                            🚪 {gate.name}
+                          </text>
+                        </g>
+                      );
+                    });
+                  })()}
+
                   {/* IoT Hardware Mesh Nodes & Live Physical SOS Beacon Markers */}
                                     {gisLayers.nodes && nodes.map((n) => {
                     const isOnline = n.status === 'ONLINE';
@@ -2411,102 +2777,17 @@ export default function App() {
             </div>
                   
 {/* EMERGENCY HAZARD INCIDENT ISOLATION & LORA BROADCAST PANEL */}
-<div className="bg-zinc-950 border border-red-900/60 rounded-lg p-3 space-y-3 font-mono">
-  <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-    <div className="flex items-center gap-2">
-      <Flame className="w-4 h-4 text-red-500 animate-pulse" />
-      <span className="text-xs font-bold text-white uppercase tracking-wider">
-        Hazard Incident Isolation &amp; Mesh Broadcast
-      </span>
-    </div>
-    <span className="text-[10px] text-zinc-500">LoRa 433MHz • ESP-NOW</span>
-  </div>
-
-  {/* Active Hazard Incident Alert Banner */}
-  {activeHazards && activeHazards.has_hazard && (
-    <div className="p-2.5 rounded bg-red-950/80 border border-red-700/80 text-xs space-y-2 animate-pulse">
-      <div className="flex items-center justify-between text-red-300 font-bold">
-        <span className="flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-          HAZARD ACTIVE: {Object.keys(activeHazards.isolated_zones || {}).map((z) => z.toUpperCase()).join(', ')} ISOLATED
-        </span>
-        <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded border border-red-600 font-bold">
-          TRAVEL COST = ∞
-        </span>
-      </div>
-      <p className="text-[11px] text-red-200/90 leading-tight">
-        All intersecting corridors locked. NetworkX dynamic routing has isolated compromised sector and recalculated shortest safe exit paths avoiding the hazard.
-      </p>
-
-      {/* Synchronized LoRa Signboard Text Payloads */}
-      <div className="pt-1.5 border-t border-red-900/60 space-y-1">
-        <div className="text-red-400 font-bold uppercase text-[9.5px]">
-          Synchronized Field Display Broadcasts (Transmitted via Gateway Serial):
-        </div>
-        {(hazardBroadcasts || []).map((b, bi) => (
-          <div key={bi} className="bg-black/90 px-2 py-1.5 rounded border border-red-800/60 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-300 font-mono">
-              <span className="text-red-400 font-bold mr-1">Node {b.zone_id ? b.zone_id.toUpperCase() : `Z${b.z_num}`}:</span>
-              "{b.text}"
-            </span>
-            <span className="text-emerald-400 font-bold flex items-center gap-1 ml-2 shrink-0">
-              <span>{b.arrow}</span>
-              <span className="text-[9px] text-zinc-400">({b.exit})</span>
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
-
-  {/* Incident Trigger & Clear Controls */}
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-    <div>
-      <label className="text-[10px] text-zinc-400 block mb-1">COMPROMISED SECTOR</label>
-      <select
-        value={selectedHazardZone}
-        onChange={(e) => setSelectedHazardZone(e.target.value)}
-        className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
-      >
-        <option value="z2">Zone 2 (East Choke)</option>
-        <option value="z1">Zone 1 (Main Plaza)</option>
-        <option value="z3">Zone 3 (South Bridge)</option>
-        <option value="z4">Zone 4 (North Choke)</option>
-      </select>
-    </div>
-    <div>
-      <label className="text-[10px] text-zinc-400 block mb-1">HAZARD NATURE</label>
-      <select
-        value={selectedHazardType}
-        onChange={(e) => setSelectedHazardType(e.target.value)}
-        className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
-      >
-        <option value="FIRE">🔥 Fire Outbreak</option>
-        <option value="CRITICAL HAZARD">⚠️ Critical Crush Hazard</option>
-        <option value="STRUCTURAL">🚫 Structural Collapse</option>
-      </select>
-    </div>
-    <div className="flex items-end gap-1.5">
-      <button
-        onClick={() => handleTriggerHazard(selectedHazardZone, selectedHazardType)}
-        className="flex-1 py-1.5 px-2 rounded bg-red-950 hover:bg-red-900 border border-red-700 text-red-200 text-[11px] font-bold flex items-center justify-center gap-1 transition"
-      >
-        <Flame className="w-3.5 h-3.5 text-red-400" />
-        <span>ISOLATE &amp; REROUTE</span>
-      </button>
-      {activeHazards && activeHazards.has_hazard && (
-        <button
-          onClick={() => handleClearHazard(null)}
-          title="Restore standard paths & send all-clear"
-          className="py-1.5 px-2 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 text-[11px] font-bold flex items-center justify-center gap-1 transition shrink-0"
-        >
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>ALL CLEAR</span>
-        </button>
-      )}
-    </div>
-  </div>
-</div>
+<EmergencyHazardPanel
+  activeHazards={activeHazards}
+  hazardBroadcasts={hazardBroadcasts}
+  selectedHazardZone={selectedHazardZone}
+  setSelectedHazardZone={setSelectedHazardZone}
+  selectedHazardType={selectedHazardType}
+  setSelectedHazardType={setSelectedHazardType}
+  handleTriggerHazard={handleTriggerHazard}
+  handleClearHazard={handleClearHazard}
+  routes={routes}
+/>
 
                   <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 flex flex-col justify-between space-y-3">
               <div>
@@ -3045,10 +3326,23 @@ export default function App() {
                           <g key={zid} onClick={() => setSelectedZoneKey(zid)} className="cursor-pointer">
                             <polygon
                               points={pointsStr}
-                              fill={isIsolated ? '#dc2626' : fillColor}
-                              stroke={isSelected ? '#ffffff' : strokeColor}
-                              strokeWidth={isSelected ? '2.5' : '1.5'}
+                              fill={isIsolated ? 'rgba(220, 38, 38, 0.65)' : fillColor}
+                              stroke={isIsolated ? '#ef4444' : isSelected ? '#ffffff' : strokeColor}
+                              strokeWidth={isIsolated ? '3' : isSelected ? '2.5' : '1.5'}
+                              strokeDasharray={isIsolated ? '6 3' : 'none'}
                             />
+                            {isIsolated && (
+                              <g>
+                                <circle cx={cx} cy={cy} r="26" fill="rgba(239, 68, 68, 0.35)">
+                                  <animate attributeName="r" values="18;34;18" dur="1.3s" repeatCount="indefinite" />
+                                  <animate attributeName="opacity" values="0.9;0.2;0.9" dur="1.3s" repeatCount="indefinite" />
+                                </circle>
+                                <rect x={cx - 62} y={cy - 28} width="124" height="20" rx="4" fill="#991b1b" stroke="#fca5a5" strokeWidth="1.5" />
+                                <text x={cx} y={cy - 14} textAnchor="middle" fill="#ffffff" fontSize="8.5" fontFamily="monospace" fontWeight="bold">
+                                  🔥 FIRE HAZARD ZONE
+                                </text>
+                              </g>
+                            )}
                             {/* Centered Tactical Telemetry */}
                             <text x={cx} y={cy - 10} textAnchor="middle" fill="#ffffff" fontSize="10.5" fontFamily="monospace" fontWeight="bold">
                               {z.shortName || z.name} <tspan fill="#a1a1aa" fontSize="8.5">[{zid.toUpperCase()}]</tspan>
@@ -3206,7 +3500,21 @@ export default function App() {
                               strokeWidth="2"
                               strokeDasharray={isIsolated ? '4 4' : '6 3'}
                             />
-                            <circle cx={endPt.x} cy={endPt.y} r="3" fill={isIsolated ? '#ef4444' : '#10b981'} />
+                            <circle cx={endPt.x} cy={endPt.y} r="3.5" fill={isIsolated ? '#ef4444' : '#10b981'} />
+                            {isIsolated ? (
+                              <g>
+                                <circle cx={Math.round((startPt.x + endPt.x)/2)} cy={Math.round((startPt.y + endPt.y)/2)} r="9" fill="#991b1b" stroke="#f87171" strokeWidth="1" />
+                                <text x={Math.round((startPt.x + endPt.x)/2)} y={Math.round((startPt.y + endPt.y)/2 + 3)} textAnchor="middle" fill="#ffffff" fontSize="7" fontFamily="monospace" fontWeight="bold">
+                                  ⛔
+                                </text>
+                              </g>
+                            ) : (
+                              <g>
+                                <text x={Math.round((startPt.x + endPt.x)/2)} y={Math.round((startPt.y + endPt.y)/2 - 5)} textAnchor="middle" fill="#34d399" fontSize="7.5" fontFamily="monospace" fontWeight="bold">
+                                  &gt;&gt;&gt; SAFE: {(rInfo?.target_exit || rInfo?.exit || 'GATE').toUpperCase()}
+                                </text>
+                              </g>
+                            )}
                           </g>
                         );
                       });
@@ -3279,6 +3587,61 @@ export default function App() {
                     </g>
                   )}
 
+                  
+                  {/* Venue Emergency Exits & Evacuation Gates */}
+                  {gisLayers.gates && (() => {
+                    const customGates = (gisMaster?.features || []).filter((f) => f.geometry?.type === 'Point');
+                    const defaultGates = [
+                      { id: 'gate_a', name: 'GATE A', desc: 'Main Portal / West', x: 32, y: 192 },
+                      { id: 'gate_b', name: 'GATE B', desc: 'Arterial / East Exit', x: 601, y: 202 },
+                      { id: 'gate_c', name: 'GATE C', desc: 'North Relief Portal', x: 317, y: 20 }
+                    ];
+
+                    const gatesToRender = (gisProjector && customGates.length > 0)
+                      ? customGates.map(g => {
+                          const pt = gisProjector.project(g.geometry.coordinates);
+                          const gid = (g.id || g.properties?.id || '').toLowerCase();
+                          return {
+                            id: gid,
+                            name: g.properties?.name || gid.toUpperCase(),
+                            desc: 'Emergency Exit',
+                            x: pt.x,
+                            y: pt.y
+                          };
+                        })
+                      : defaultGates;
+
+                    return gatesToRender.map(gate => {
+                      const isTargetSafeExit = Object.values(routes || {}).some(r => 
+                        (r.target_exit || r.exit || '').toLowerCase().includes(gate.id.toLowerCase())
+                      );
+
+                      return (
+                        <g key={`gate-portal-${gate.id}`}>
+                          {isTargetSafeExit && (
+                            <circle cx={gate.x} cy={gate.y} r="18" fill="rgba(16, 185, 129, 0.25)">
+                              <animate attributeName="r" values="10;22;10" dur="1.8s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.8s" repeatCount="indefinite" />
+                            </circle>
+                          )}
+                          <rect
+                            x={gate.x - 30}
+                            y={gate.y - 12}
+                            width="60"
+                            height="24"
+                            rx="4"
+                            fill={isTargetSafeExit ? '#064e3b' : '#14532d'}
+                            stroke={isTargetSafeExit ? '#34d399' : '#10b981'}
+                            strokeWidth={isTargetSafeExit ? '2' : '1'}
+                          />
+                          <text x={gate.x} y={gate.y + 3} textAnchor="middle" fill="#ecfdf5" fontSize="8" fontFamily="monospace" fontWeight="bold">
+                            🚪 {gate.name}
+                          </text>
+                        </g>
+                      );
+                    });
+                  })()}
+
                   {/* IoT Hardware Mesh Nodes & Live Physical SOS Beacon Markers */}
                                     {gisLayers.nodes && nodes.map((n) => {
                     const isOnline = n.status === 'ONLINE';
@@ -3337,102 +3700,17 @@ export default function App() {
                 <div className="lg:col-span-4 space-y-4">
                   
 {/* EMERGENCY HAZARD INCIDENT ISOLATION & LORA BROADCAST PANEL */}
-<div className="bg-zinc-950 border border-red-900/60 rounded-lg p-3 space-y-3 font-mono">
-  <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-    <div className="flex items-center gap-2">
-      <Flame className="w-4 h-4 text-red-500 animate-pulse" />
-      <span className="text-xs font-bold text-white uppercase tracking-wider">
-        Hazard Incident Isolation &amp; Mesh Broadcast
-      </span>
-    </div>
-    <span className="text-[10px] text-zinc-500">LoRa 433MHz • ESP-NOW</span>
-  </div>
-
-  {/* Active Hazard Incident Alert Banner */}
-  {activeHazards && activeHazards.has_hazard && (
-    <div className="p-2.5 rounded bg-red-950/80 border border-red-700/80 text-xs space-y-2 animate-pulse">
-      <div className="flex items-center justify-between text-red-300 font-bold">
-        <span className="flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-          HAZARD ACTIVE: {Object.keys(activeHazards.isolated_zones || {}).map((z) => z.toUpperCase()).join(', ')} ISOLATED
-        </span>
-        <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded border border-red-600 font-bold">
-          TRAVEL COST = ∞
-        </span>
-      </div>
-      <p className="text-[11px] text-red-200/90 leading-tight">
-        All intersecting corridors locked. NetworkX dynamic routing has isolated compromised sector and recalculated shortest safe exit paths avoiding the hazard.
-      </p>
-
-      {/* Synchronized LoRa Signboard Text Payloads */}
-      <div className="pt-1.5 border-t border-red-900/60 space-y-1">
-        <div className="text-red-400 font-bold uppercase text-[9.5px]">
-          Synchronized Field Display Broadcasts (Transmitted via Gateway Serial):
-        </div>
-        {(hazardBroadcasts || []).map((b, bi) => (
-          <div key={bi} className="bg-black/90 px-2 py-1.5 rounded border border-red-800/60 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-300 font-mono">
-              <span className="text-red-400 font-bold mr-1">Node {b.zone_id ? b.zone_id.toUpperCase() : `Z${b.z_num}`}:</span>
-              "{b.text}"
-            </span>
-            <span className="text-emerald-400 font-bold flex items-center gap-1 ml-2 shrink-0">
-              <span>{b.arrow}</span>
-              <span className="text-[9px] text-zinc-400">({b.exit})</span>
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
-
-  {/* Incident Trigger & Clear Controls */}
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-    <div>
-      <label className="text-[10px] text-zinc-400 block mb-1">COMPROMISED SECTOR</label>
-      <select
-        value={selectedHazardZone}
-        onChange={(e) => setSelectedHazardZone(e.target.value)}
-        className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
-      >
-        <option value="z2">Zone 2 (East Choke)</option>
-        <option value="z1">Zone 1 (Main Plaza)</option>
-        <option value="z3">Zone 3 (South Bridge)</option>
-        <option value="z4">Zone 4 (North Choke)</option>
-      </select>
-    </div>
-    <div>
-      <label className="text-[10px] text-zinc-400 block mb-1">HAZARD NATURE</label>
-      <select
-        value={selectedHazardType}
-        onChange={(e) => setSelectedHazardType(e.target.value)}
-        className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
-      >
-        <option value="FIRE">🔥 Fire Outbreak</option>
-        <option value="CRITICAL HAZARD">⚠️ Critical Crush Hazard</option>
-        <option value="STRUCTURAL">🚫 Structural Collapse</option>
-      </select>
-    </div>
-    <div className="flex items-end gap-1.5">
-      <button
-        onClick={() => handleTriggerHazard(selectedHazardZone, selectedHazardType)}
-        className="flex-1 py-1.5 px-2 rounded bg-red-950 hover:bg-red-900 border border-red-700 text-red-200 text-[11px] font-bold flex items-center justify-center gap-1 transition"
-      >
-        <Flame className="w-3.5 h-3.5 text-red-400" />
-        <span>ISOLATE &amp; REROUTE</span>
-      </button>
-      {activeHazards && activeHazards.has_hazard && (
-        <button
-          onClick={() => handleClearHazard(null)}
-          title="Restore standard paths & send all-clear"
-          className="py-1.5 px-2 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 text-[11px] font-bold flex items-center justify-center gap-1 transition shrink-0"
-        >
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>ALL CLEAR</span>
-        </button>
-      )}
-    </div>
-  </div>
-</div>
+<EmergencyHazardPanel
+  activeHazards={activeHazards}
+  hazardBroadcasts={hazardBroadcasts}
+  selectedHazardZone={selectedHazardZone}
+  setSelectedHazardZone={setSelectedHazardZone}
+  selectedHazardType={selectedHazardType}
+  setSelectedHazardType={setSelectedHazardType}
+  handleTriggerHazard={handleTriggerHazard}
+  handleClearHazard={handleClearHazard}
+  routes={routes}
+/>
 
                   <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 flex flex-col justify-between space-y-3">
               <div>
@@ -3754,102 +4032,17 @@ export default function App() {
                 {/* Emergency Hazard Incident Isolation Desk */}
                 
 {/* EMERGENCY HAZARD INCIDENT ISOLATION & LORA BROADCAST PANEL */}
-<div className="bg-zinc-950 border border-red-900/60 rounded-lg p-3 space-y-3 font-mono">
-  <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-    <div className="flex items-center gap-2">
-      <Flame className="w-4 h-4 text-red-500 animate-pulse" />
-      <span className="text-xs font-bold text-white uppercase tracking-wider">
-        Hazard Incident Isolation &amp; Mesh Broadcast
-      </span>
-    </div>
-    <span className="text-[10px] text-zinc-500">LoRa 433MHz • ESP-NOW</span>
-  </div>
-
-  {/* Active Hazard Incident Alert Banner */}
-  {activeHazards && activeHazards.has_hazard && (
-    <div className="p-2.5 rounded bg-red-950/80 border border-red-700/80 text-xs space-y-2 animate-pulse">
-      <div className="flex items-center justify-between text-red-300 font-bold">
-        <span className="flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-          HAZARD ACTIVE: {Object.keys(activeHazards.isolated_zones || {}).map((z) => z.toUpperCase()).join(', ')} ISOLATED
-        </span>
-        <span className="text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded border border-red-600 font-bold">
-          TRAVEL COST = ∞
-        </span>
-      </div>
-      <p className="text-[11px] text-red-200/90 leading-tight">
-        All intersecting corridors locked. NetworkX dynamic routing has isolated compromised sector and recalculated shortest safe exit paths avoiding the hazard.
-      </p>
-
-      {/* Synchronized LoRa Signboard Text Payloads */}
-      <div className="pt-1.5 border-t border-red-900/60 space-y-1">
-        <div className="text-red-400 font-bold uppercase text-[9.5px]">
-          Synchronized Field Display Broadcasts (Transmitted via Gateway Serial):
-        </div>
-        {(hazardBroadcasts || []).map((b, bi) => (
-          <div key={bi} className="bg-black/90 px-2 py-1.5 rounded border border-red-800/60 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-300 font-mono">
-              <span className="text-red-400 font-bold mr-1">Node {b.zone_id ? b.zone_id.toUpperCase() : `Z${b.z_num}`}:</span>
-              "{b.text}"
-            </span>
-            <span className="text-emerald-400 font-bold flex items-center gap-1 ml-2 shrink-0">
-              <span>{b.arrow}</span>
-              <span className="text-[9px] text-zinc-400">({b.exit})</span>
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
-
-  {/* Incident Trigger & Clear Controls */}
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-    <div>
-      <label className="text-[10px] text-zinc-400 block mb-1">COMPROMISED SECTOR</label>
-      <select
-        value={selectedHazardZone}
-        onChange={(e) => setSelectedHazardZone(e.target.value)}
-        className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
-      >
-        <option value="z2">Zone 2 (East Choke)</option>
-        <option value="z1">Zone 1 (Main Plaza)</option>
-        <option value="z3">Zone 3 (South Bridge)</option>
-        <option value="z4">Zone 4 (North Choke)</option>
-      </select>
-    </div>
-    <div>
-      <label className="text-[10px] text-zinc-400 block mb-1">HAZARD NATURE</label>
-      <select
-        value={selectedHazardType}
-        onChange={(e) => setSelectedHazardType(e.target.value)}
-        className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
-      >
-        <option value="FIRE">🔥 Fire Outbreak</option>
-        <option value="CRITICAL HAZARD">⚠️ Critical Crush Hazard</option>
-        <option value="STRUCTURAL">🚫 Structural Collapse</option>
-      </select>
-    </div>
-    <div className="flex items-end gap-1.5">
-      <button
-        onClick={() => handleTriggerHazard(selectedHazardZone, selectedHazardType)}
-        className="flex-1 py-1.5 px-2 rounded bg-red-950 hover:bg-red-900 border border-red-700 text-red-200 text-[11px] font-bold flex items-center justify-center gap-1 transition"
-      >
-        <Flame className="w-3.5 h-3.5 text-red-400" />
-        <span>ISOLATE &amp; REROUTE</span>
-      </button>
-      {activeHazards && activeHazards.has_hazard && (
-        <button
-          onClick={() => handleClearHazard(null)}
-          title="Restore standard paths & send all-clear"
-          className="py-1.5 px-2 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 text-[11px] font-bold flex items-center justify-center gap-1 transition shrink-0"
-        >
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>ALL CLEAR</span>
-        </button>
-      )}
-    </div>
-  </div>
-</div>
+<EmergencyHazardPanel
+  activeHazards={activeHazards}
+  hazardBroadcasts={hazardBroadcasts}
+  selectedHazardZone={selectedHazardZone}
+  setSelectedHazardZone={setSelectedHazardZone}
+  selectedHazardType={selectedHazardType}
+  setSelectedHazardType={setSelectedHazardType}
+  handleTriggerHazard={handleTriggerHazard}
+  handleClearHazard={handleClearHazard}
+  routes={routes}
+/>
 
 
                 {/* Active System Alerts Queue */}

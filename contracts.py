@@ -36,7 +36,8 @@ class NodeEvent(BaseModel):
     """Hardware telemetry from ESP32 / ESP8266 field nodes via LoRa/ESP-NOW Gateway."""
     ts: float = Field(default_factory=time.time)
     z: int = Field(..., description="Zone number (1..4)")
-    sos: int = Field(0, description="1 if physical SOS button pressed (GPIO 13 LOW), else 0")
+    sos: int = Field(0, description="1 if physical SOS button pressed (GPIO 13 LOW), 2 for fire trigger, else 0")
+    fire: Optional[int] = Field(0, description="1 if flame sensor (KY-026 on GPIO 35) or smoke sensor triggered, else 0")
     mo: int = Field(0, description="Motion / PIR activity or microphone audio spike flag")
     seq: int = Field(0, description="Incrementing packet sequence counter to detect dropped frames")
     rssi: int = Field(-75, description="LoRa / RF signal strength in dBm")

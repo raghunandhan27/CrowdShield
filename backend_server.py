@@ -19,6 +19,7 @@ import os
 import sys
 import threading
 import time
+from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional, Set
 
@@ -2194,7 +2195,12 @@ async def post_node(ev: NodeEvent):
     else:
         state["nodes"][nid] = ev_dict
 
-    if ev.sos == 1:
+    if ev.sos == 2 or getattr(ev, "fire", 0) == 1:
+        zid = f"z{ev.z}"
+        req = HazardTriggerReq(zone_id=zid, hazard_type="FIRE", severity="CRITICAL", user=f"Node_Z{ev.z}_FlameSensor_GPIO35")
+        await trigger_hazard_isolation(req)
+        print(f"[FIRE SENSOR DETECTED] >>> Node {ev.z} reported active flame on GPIO 35! Engaged automatic safest route navigation.")
+    elif ev.sos == 1:
         trigger_sos_medical_incident(f"z{ev.z}", f"NODE-Z{ev.z}", f"Physical SOS Button pressed on ESP32 (RSSI: {ev.rssi} dBm, Seq #{ev.seq})")
         log_operator_action("Hardware_Node", "HARDWARE_SOS_RECEIVED", f"Physical SOS on Node z{ev.z} (GPIO 12)")
 
@@ -2249,6 +2255,167 @@ class HazardTriggerReq(BaseModel):
 class HazardClearReq(BaseModel):
     zone_id: Optional[str] = None
     user: str = "Operator_Raghu"
+
+
+@app.post("/api/fire/trigger")
+async def trigger_fire_api(req: HazardTriggerReq):
+    req.hazard_type = "FIRE"
+    return await trigger_hazard_isolation(req)
+
+
+@app.post("/api/fire/clear")
+async def clear_fire_api(req: HazardClearReq):
+    return await clear_hazard_isolation(req)
+
+
+@app.get("/api/fire/status")
+async def get_fire_status():
+    return {
+        "active_hazards": gis_manager.get_active_hazards(),
+        "recent_broadcasts": state.get("hazard_broadcasts", []),
+        "evacuation_routes": state.get("gis_routing", {}).get("evacuation", {})
+    }
+
+
+def trigger_fire_emergency_reroute(fire_zone_id: str, zone_risk_levels: dict = None):
+    """
+    Computes safest bypass route for every zone using NetworkX when fire occurs in `fire_zone_id`.
+    Formats and transmits 4-field serial packets: ZONE_NUM|LEVEL|HEADER|ROUTE
+    e.g. 1|3|FIRE IN Z2! AVOID Z2|SAFE EXIT: GATE B
+    """
+    zid = fire_zone_id.lower().strip()
+    if not zid.startswith("z") and zid.isdigit():
+        zid = f"z{zid}"
+
+    res = gis_manager.trigger_zone_hazard(zid, "FIRE", "CRITICAL")
+    state["active_hazards"] = gis_manager.get_active_hazards()
+    state["hazard_broadcasts"] = res["broadcasts"]
+    state["gis_routing"] = res["routing"]
+    state["gis_geojson"] = gis_manager.get_full_venue_geojson(state["zones"])
+
+    # Dispatches to Gateway ESP32 USB serial and queues for downlink
+    global active_serial_conn
+    with active_serial_lock:
+        for b in res["broadcasts"]:
+            pipe_line = b["pipe_payload"] + "\n"
+            if active_serial_conn and active_serial_conn.is_open:
+                try:
+                    active_serial_conn.write(pipe_line.encode("utf-8"))
+                    active_serial_conn.flush()
+                    print(f"[FIRE AUTO-DISPATCH TO SERIAL]: {pipe_line.strip()}")
+                except Exception as e:
+                    print(f"[SERIAL ERROR]: {e}")
+            downlink_queue.append({
+                "cmd": "FIRE_REROUTE",
+                "z": b["z_num"],
+                "lvl": 3,
+                "track": b["track"],
+                "header": b.get("header_text", "FIRE ALERT!"),
+                "route": b.get("route_text", "SAFE EXIT"),
+                "text": b["text"],
+                "arrow": b["arrow"],
+                "exit": b["exit"],
+                "instruction": b["text"]
+            })
+    return res
+
+
+def build_3zone_venue_graph(zone_risk_levels, fire_zones):
+    G = nx.Graph()
+    # 3 Zones and 3 Exits Corridor Topology:
+    corridors = [
+        ("z1", "z2", 15.0, "z2"),       # Corridor linking Zone 1 through Zone 2
+        ("z2", "GATE_A", 10.0, "z2"),   # Zone 2 leads to Gate A
+        ("z2", "z3", 15.0, "z3"),       # Corridor linking Zone 2 and Zone 3
+        ("z3", "GATE_B", 12.0, "z3"),   # Zone 3 leads to Gate B
+        ("z1", "GATE_C", 20.0, "z1"),   # Direct alternative link from Zone 1 to Gate C
+    ]
+
+    for u, v, length_m, pass_zone in corridors:
+        lvl = zone_risk_levels.get(pass_zone, 0)
+        if pass_zone in fire_zones:
+            weight = 999999.0
+        else:
+            weight = length_m * (1.0 + 4.0 * lvl)
+        G.add_edge(u, v, weight=weight, length=length_m)
+    return G
+
+
+def trigger_3zone_fire_reroute(fire_zone_id: str, zone_risk_levels: dict = None):
+    """
+    Automated Fire Rerouting for 3-Zone & 3-Exit Layout:
+    When fire breaks out in fire_zone_id (e.g. z2), locks z2 and recalculates
+    safest exits (GATE_A, GATE_B, GATE_C) for all 3 zones.
+    """
+    zid = fire_zone_id.lower().strip()
+    if not zid.startswith("z") and zid.isdigit():
+        zid = f"z{zid}"
+
+    if zone_risk_levels is None:
+        zone_risk_levels = {"z1": 0, "z2": 0, "z3": 0}
+
+    fire_zones = {zid}
+    zone_risk_levels[zid] = 3
+
+    G = build_3zone_venue_graph(zone_risk_levels, fire_zones)
+    exits = ["GATE_A", "GATE_B", "GATE_C"]
+    all_zones = ["z1", "z2", "z3"]
+    dispatch_results = {}
+
+    global active_serial_conn
+    for idx, z in enumerate(all_zones, start=1):
+        best_exit = "SAFE EXIT"
+        best_path = []
+        best_cost = float("inf")
+
+        for ex in exits:
+            try:
+                path = nx.shortest_path(G, source=z, target=ex, weight="weight")
+                cost = nx.shortest_path_length(G, source=z, target=ex, weight="weight")
+                if cost < best_cost:
+                    best_cost = cost
+                    best_exit = ex.replace("_", " ")
+                    best_path = path
+            except nx.NetworkXNoPath:
+                continue
+
+        if z == zid:
+            header_text = f"FIRE IN {zid.upper()}!"
+            route_text = f"EVACUATE -> {best_exit}"
+        else:
+            header_text = f"FIRE IN {zid.upper()}! AVOID"
+            route_text = f"SAFE ROUTE: {best_exit}"
+
+        serial_packet = f"{idx}|3|{header_text}|{route_text}\n"
+        print(f"[ZONE {idx} DISPLAY]: {serial_packet.strip()} | Path: {' -> '.join(best_path)}")
+
+        dispatch_results[z] = {
+            "safe_exit": best_exit,
+            "path": " -> ".join(best_path),
+            "display_header": header_text,
+            "display_route": route_text,
+            "serial_packet": serial_packet.strip()
+        }
+
+        with active_serial_lock:
+            if active_serial_conn and active_serial_conn.is_open:
+                try:
+                    active_serial_conn.write(serial_packet.encode("utf-8"))
+                    active_serial_conn.flush()
+                except Exception as e:
+                    print(f"[SERIAL SEND ERROR]: {e}")
+            downlink_queue.append({
+                "cmd": "FIRE_REROUTE_3ZONE",
+                "z": idx,
+                "lvl": 3,
+                "track": 3 if z == zid else 2,
+                "header": header_text,
+                "route": route_text,
+                "text": f"{header_text} — {route_text}",
+                "instruction": f"{header_text} — {route_text}"
+            })
+
+    return dispatch_results
 
 
 @app.post("/api/hazard/trigger")
@@ -2329,6 +2496,9 @@ async def trigger_hazard_isolation(req: HazardTriggerReq):
         "hazard_type": req.hazard_type.upper(),
         "serial_dispatched": serial_dispatched,
         "rerouted_paths": res["evacuation"],
+        "routes": res["evacuation"],
+        "gis_routing": res["routing"],
+        "active_hazards": state["active_hazards"],
         "broadcasts": res["broadcasts"]
     }
 
@@ -2389,6 +2559,9 @@ async def clear_hazard_isolation(req: HazardClearReq):
         "cleared_zone": req.zone_id,
         "serial_dispatched": serial_dispatched,
         "routing": res["routing"],
+        "gis_routing": res["routing"],
+        "routes": res.get("evacuation", {}),
+        "active_hazards": state["active_hazards"],
         "broadcasts": res["broadcasts"]
     }
 

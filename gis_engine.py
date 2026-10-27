@@ -741,36 +741,42 @@ class GISVenueManager:
         all_zones = list(self.shapely_zones.keys()) if self.shapely_zones else ["z1", "z2", "z3", "z4"]
         for z in all_zones:
             z_num = int(z.replace("z", "")) if z.replace("z", "").isdigit() else 1
+            evac_info = routing.get("evacuation", {}).get(z, {})
+            target_exit = evac_info.get("target_exit") or ("gate_a" if z == "z1" or z == "z2" else "gate_b")
+            exit_label = gate_names.get(target_exit, target_exit.upper().replace("_", " "))
+            dir_label = gate_directions.get(target_exit, "EXIT")
+
             if z == zid:
                 # Compromised zone itself: direct emergency alert
-                text_msg = f"{hazard_type.upper()} HAZARD - EVACUATE IMMEDIATELY"
-                pipe_payload = f"{z_num}|3|{text_msg}"
+                header_text = f"FIRE ALERT HERE ({zid.upper()})!"
+                route_text = f"EVACUATE -> {exit_label}"
+                pipe_payload = f"{z_num}|3|{header_text}|{route_text}"
                 broadcasts.append({
                     "zone_id": z,
                     "z_num": z_num,
                     "level": 3,
-                    "track": 1,
-                    "text": text_msg,
+                    "track": 3,
+                    "header_text": header_text,
+                    "route_text": route_text,
+                    "text": f"{header_text} — {route_text}",
                     "arrow": "EMERGENCY EVAC",
                     "pipe_payload": pipe_payload,
-                    "exit": "EMERGENCY_EXIT",
-                    "status": "ISOLATED_HAZARD"
+                    "exit": exit_label,
+                    "status": "FIRE_ISOLATED"
                 })
             else:
                 # Surrounding zones: safe reroute bypassing hazard zone
-                evac_info = routing.get("evacuation", {}).get(z, {})
-                target_exit = evac_info.get("target_exit") or "gate_a"
-                exit_label = gate_names.get(target_exit, target_exit.upper())
-                dir_label = gate_directions.get(target_exit, "EXIT")
-
-                text_msg = f"{hazard_type.upper()} IN {zid.upper()} - REROUTE VIA {exit_label}"
-                pipe_payload = f"{z_num}|3|{text_msg}"
+                header_text = f"FIRE IN {zid.upper()}! AVOID {zid.upper()}"
+                route_text = f"SAFE ROUTE: {exit_label}"
+                pipe_payload = f"{z_num}|3|{header_text}|{route_text}"
                 broadcasts.append({
                     "zone_id": z,
                     "z_num": z_num,
                     "level": 3,
                     "track": 2,  # Track 2: Caution / Reroute audio
-                    "text": text_msg,
+                    "header_text": header_text,
+                    "route_text": route_text,
+                    "text": f"{header_text} — {route_text}",
                     "arrow": dir_label,
                     "pipe_payload": pipe_payload,
                     "exit": exit_label,
