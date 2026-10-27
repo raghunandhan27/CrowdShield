@@ -395,24 +395,7 @@ class RealCameraFeed:
                     state["alerts"].insert(0, alert_obj)
                     state["alerts"] = state["alerts"][:25]
 
-                    # Auto Downlink to ESP32 Mesh Node
-                    downlink_cmd = {
-                        "z": z_num,
-                        "lvl": 3,
-                        "action": "FALL_ALERT",
-                        "instruction": "PERSON DOWN STOP UPSTREAM",
-                        "track": 1,
-                        "cmd": "PLAY"
-                    }
-                    downlink_queue.append(downlink_cmd)
-                    with active_serial_lock:
-                        if active_serial_conn and active_serial_conn.is_open:
-                            try:
-                                active_serial_conn.write((json.dumps(downlink_cmd) + "\n").encode("utf-8"))
-                                active_serial_conn.flush()
-                                print(f"[FALL ALERT GATEWAY] >>> Dispatched Downlink to ESP32: {downlink_cmd}")
-                            except Exception:
-                                pass
+                    # Automated physical serial broadcast removed (reserved for operator authorization)
 
                     # Dynamic GIS Corridor Blockade (NetworkX automatic rerouting)
                     corridor_map = {"z1": "c_z1_z2", "z2": "c_z1_z2", "z3": "c_z1_z3", "z4": "c_z2_z4"}
@@ -446,23 +429,7 @@ class RealCameraFeed:
                     state["alerts"].insert(0, alert_obj)
                     state["alerts"] = state["alerts"][:25]
 
-                    downlink_cmd = {
-                        "z": z_num,
-                        "lvl": 3,
-                        "action": "FIGHT_ALERT",
-                        "instruction": "VIOLENT FIGHT STOP STAND CLEAR",
-                        "track": 2,
-                        "cmd": "PLAY"
-                    }
-                    downlink_queue.append(downlink_cmd)
-                    with active_serial_lock:
-                        if active_serial_conn and active_serial_conn.is_open:
-                            try:
-                                active_serial_conn.write((json.dumps(downlink_cmd) + "\n").encode("utf-8"))
-                                active_serial_conn.flush()
-                                print(f"[FIGHT ALERT GATEWAY] >>> Dispatched Downlink to ESP32: {downlink_cmd}")
-                            except Exception:
-                                pass
+                    # Automated physical serial broadcast removed (reserved for operator authorization)
 
                     log_operator_action("AI_VISION_SENTINEL", "VIOLENT_BRAWL_DETECTED", f"Automated fight detection in {zid}. Audio track 2 triggered & security alerted.")
 
@@ -1017,6 +984,8 @@ async def real_time_forecast_loop():
 active_serial_conn = None
 active_serial_lock = threading.Lock()
 main_event_loop = None
+serial_user_pause = False
+current_serial_port = None
 
 
 def find_esp_com_port() -> Optional[str]:
@@ -1041,12 +1010,16 @@ def embedded_serial_gateway_worker(loop):
     Ingests live ESP-NOW telemetry packets and transmits operator downlink commands.
     Automatically runs on server launch so the user never needs a separate starter bridge!
     """
-    global active_serial_conn
-    if os.environ.get("ENABLE_SERIAL_HARDWARE", "false").lower() not in ("true", "1", "yes"):
-        print("[SERIAL GATEWAY] Hardware serial bridge disabled (100% Software/Vision/GIS mode). COM ports left free.")
+    global active_serial_conn, serial_user_pause, current_serial_port
+    if os.environ.get("ENABLE_SERIAL_HARDWARE", "true").lower() in ("false", "0", "no"):
+        print("[SERIAL GATEWAY] Hardware serial bridge explicitly disabled by env. COM ports left free.")
         return
     print("[SERIAL GATEWAY] Auto-connecting ESP32/ESP8266 USB Bridge initialized...")
     while True:
+        if serial_user_pause:
+            time.sleep(1.0)
+            continue
+
         port = find_esp_com_port()
         if not port:
             time.sleep(2.5)
@@ -1058,6 +1031,7 @@ def embedded_serial_gateway_worker(loop):
             time.sleep(1.0) # Allow boot settling
             with active_serial_lock:
                 active_serial_conn = ser
+                current_serial_port = port
             print(f"[SERIAL GATEWAY] Connected to ESP Gateway on {port}! Monitoring ESP-NOW mesh...")
 
             state["nodes"]["gw"]["online"] = True
@@ -1066,6 +1040,9 @@ def embedded_serial_gateway_worker(loop):
                 asyncio.run_coroutine_threadsafe(broadcast_state(), loop)
 
             while True:
+                if serial_user_pause:
+                    print(f"[SERIAL GATEWAY] Port release requested. Closing {port}...")
+                    break
                 # 1. Read packet line from ESP
                 line = ser.readline().decode("utf-8", errors="ignore").strip()
                 if line:
@@ -1080,6 +1057,9 @@ def embedded_serial_gateway_worker(loop):
                                 rssi_val = -65
                         else:
                             ev = json.loads(line)
+
+                        if not isinstance(ev, dict):
+                            continue
 
                         if "status" in ev:
                             print(f"[SERIAL GATEWAY] Gateway status: {line}")
@@ -1124,13 +1104,29 @@ def embedded_serial_gateway_worker(loop):
                             active_serial_conn.flush()
                             print(f"[SERIAL GATEWAY] >>> Dispatched Downlink to Mesh: {cmd}")
 
-        except serial.SerialException as s_err:
+        except (serial.SerialException, PermissionError) as s_err:
             with active_serial_lock:
+                if active_serial_conn:
+                    try:
+                        active_serial_conn.close()
+                    except Exception:
+                        pass
                 active_serial_conn = None
+                current_serial_port = None
             state["nodes"]["gw"]["online"] = False
             state["nodes"]["gw"]["lastSeen"] = "Disconnected"
-            time.sleep(3.0)
+            if loop and not loop.is_closed():
+                asyncio.run_coroutine_threadsafe(broadcast_state(), loop)
+            time.sleep(2.5)
         except Exception:
+            with active_serial_lock:
+                if active_serial_conn:
+                    try:
+                        active_serial_conn.close()
+                    except Exception:
+                        pass
+                active_serial_conn = None
+                current_serial_port = None
             time.sleep(2.0)
 
 
@@ -2773,6 +2769,110 @@ async def get_hazard_status():
 
 
 @app.post("/dispatch")
+async def dispatch_downlink(cmd: DownlinkCmd):
+    cmd_dict = cmd.model_dump()
+    instr = str(cmd_dict.get("instruction", "")).lower()
+    track = 1
+    if "1" in instr or "0001" in instr or "evacuate" in instr or "inst-01" in instr:
+        track = 1
+    elif "2" in instr or "0002" in instr or "caution" in instr or "slow" in instr or "reroute" in instr or "inst-02" in instr:
+        track = 2
+    elif "3" in instr or "0003" in instr or "clear" in instr or "standby" in instr or "inst-03" in instr:
+        track = 3
+
+    cmd_dict["track"] = track
+    cmd_dict["cmd"] = "PLAY"
+    if not cmd_dict.get("instruction") or cmd_dict.get("instruction") == "EVACUATE":
+        cmd_dict["instruction"] = f"000{track}.mp3"
+
+    # Multi-packet burst: If z == 0 (ALL ZONES), broadcast z:0 AND burst to z:1, z:2, z:3 for universal compatibility across any node firmware
+    packets_to_send = []
+    if cmd.z == 0:
+        bcast = dict(cmd_dict)
+        bcast["z"] = 0
+        packets_to_send.append(bcast)
+        for zid in [1, 2, 3]:
+            sub = dict(cmd_dict)
+            sub["z"] = zid
+            packets_to_send.append(sub)
+    else:
+        packets_to_send.append(cmd_dict)
+
+    # Immediately transmit directly to physical ESP Gateway if connected!
+    global active_serial_conn
+    sent_direct = False
+    with active_serial_lock:
+        if active_serial_conn and active_serial_conn.is_open:
+            try:
+                for pkt in packets_to_send:
+                    line_to_send = json.dumps(pkt) + "\n"
+                    active_serial_conn.write(line_to_send.encode("utf-8"))
+                    active_serial_conn.flush()
+                    print(f"[DIRECT DOWNLINK] Transmitted to ESP on USB Serial: {pkt}")
+                    time.sleep(0.04)
+                sent_direct = True
+            except Exception as ser_write_err:
+                print(f"[DIRECT DOWNLINK] Serial write failed: {ser_write_err}")
+
+    if not sent_direct:
+        for pkt in packets_to_send:
+            downlink_queue.append(pkt)
+        print(f"[DIRECT DOWNLINK] Queued {len(packets_to_send)} packet(s) for serial bridge delivery.")
+
+    log_operator_action(
+        "Operator_Raghu",
+        "DISPATCH_DOWNLINK",
+        f"Broadcast warning to Zone {cmd.z} (All={cmd.z==0}): Track {track} (Level {cmd.lvl}, {cmd_dict['instruction']})",
+    )
+    await broadcast_state()
+    return {
+        "ok": True,
+        "direct_serial": sent_direct,
+        "packets_sent": len(packets_to_send),
+        "target_zone": cmd.z,
+        "track": track,
+        "instruction": cmd_dict["instruction"]
+    }
+
+
+@app.get("/api/serial/status")
+async def get_serial_status():
+    global active_serial_conn, serial_user_pause, current_serial_port
+    is_open = bool(active_serial_conn and active_serial_conn.is_open)
+    return {
+        "connected": is_open,
+        "port": current_serial_port if is_open else None,
+        "paused": serial_user_pause,
+        "baud": 115200,
+        "detected_port": find_esp_com_port()
+    }
+
+
+@app.post("/api/serial/disconnect")
+async def release_serial_port():
+    global serial_user_pause, active_serial_conn, current_serial_port
+    serial_user_pause = True
+    with active_serial_lock:
+        if active_serial_conn:
+            try:
+                active_serial_conn.close()
+            except Exception:
+                pass
+            active_serial_conn = None
+            current_serial_port = None
+    state["nodes"]["gw"]["online"] = False
+    state["nodes"]["gw"]["lastSeen"] = "Released for Flashing"
+    await broadcast_state()
+    return {"ok": True, "message": "COM port successfully released. Ready for Arduino IDE flash."}
+
+
+@app.post("/api/serial/reconnect")
+async def reconnect_serial_port():
+    global serial_user_pause
+    serial_user_pause = False
+    return {"ok": True, "message": "Serial auto-reconnect resumed."}
+
+
 async def dispatch_downlink(cmd: DownlinkCmd):
     cmd_dict = cmd.model_dump()
     instr = str(cmd_dict.get("instruction", "")).lower()

@@ -826,6 +826,43 @@ export default function App() {
   const [operatorConfirmed, setOperatorConfirmed] = useState(false);
   const [operatorName, setOperatorName] = useState('Raghu (Ops Lead)');
   const [selectedPreset, setSelectedPreset] = useState(INSTRUCTION_PRESETS[0]);
+  const [broadcastTargetZone, setBroadcastTargetZone] = useState(0); // 0 = ALL ZONES (Universal Broadcast)
+  const [broadcastFeedback, setBroadcastFeedback] = useState(null);
+  const [serialState, setSerialState] = useState({ connected: false, port: null, paused: false });
+
+  // Poll serial gateway status periodically
+  useEffect(() => {
+    let mounted = true;
+    const checkSerial = async () => {
+      try {
+        const r = await fetch('http://localhost:8000/api/serial/status');
+        if (r.ok && mounted) {
+          const d = await r.json();
+          setSerialState(d);
+        }
+      } catch (e) {}
+    };
+    checkSerial();
+    const interval = setInterval(checkSerial, 3000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleToggleSerialPort = async () => {
+    try {
+      if (serialState.paused) {
+        await fetch('http://localhost:8000/api/serial/reconnect', { method: 'POST' });
+        setSerialState((prev) => ({ ...prev, paused: false }));
+      } else {
+        await fetch('http://localhost:8000/api/serial/disconnect', { method: 'POST' });
+        setSerialState((prev) => ({ ...prev, paused: true, connected: false }));
+      }
+    } catch (e) {
+      console.error('Serial port toggle error', e);
+    }
+  };
 
   // Selected Inspect Item
   const [selectedZoneKey, setSelectedZoneKey] = useState('z1');
@@ -917,24 +954,48 @@ export default function App() {
     return () => stopSiren();
   }, [activeEmergencyAlert, audioMuted]);
 
-  const handleRespondToEmergency = async (trackNum) => {
-    const targetZ = alertZoneNum || 1;
+  const handleRespondToEmergency = async (trackNum, specificZone = null) => {
+    let targetZ = 0;
+    if (specificZone !== null && specificZone !== undefined) {
+      targetZ = specificZone;
+    } else if (alertZoneNum) {
+      targetZ = alertZoneNum;
+    } else {
+      targetZ = broadcastTargetZone; // defaults to 0 (ALL ZONES)
+    }
+
     const preset = INSTRUCTION_PRESETS.find((p) => p.track === trackNum) || INSTRUCTION_PRESETS[0];
 
-    // 1. Dispatch warning downlink to target field node (clean single dispatch matching Presets 2 & 3)
+    // 1. Dispatch warning downlink to target field node / mesh
     try {
-      await fetch('http://localhost:8000/dispatch', {
+      const resp = await fetch('http://localhost:8000/dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           z: targetZ,
           lvl: trackNum === 1 ? 3 : (trackNum === 2 ? 2 : 1),
           action: 'LED_AND_AUDIO',
-          instruction: preset.mp3Track
+          instruction: preset.mp3Track || `000${trackNum}.mp3`
         })
       });
+      const data = await resp.json();
+      setBroadcastFeedback({
+        track: trackNum,
+        targetZ: targetZ,
+        ok: data.ok,
+        time: new Date().toLocaleTimeString()
+      });
+      setTimeout(() => setBroadcastFeedback(null), 5000);
     } catch (e) {
       console.warn('Dispatch failed', e);
+      setBroadcastFeedback({
+        track: trackNum,
+        targetZ: targetZ,
+        ok: false,
+        time: new Date().toLocaleTimeString(),
+        err: 'Network or backend error'
+      });
+      setTimeout(() => setBroadcastFeedback(null), 5000);
     }
 
     // 2. Clear Active Medical Incident on Backend if present
@@ -4281,26 +4342,128 @@ export default function App() {
 
                 {/* Rapid 3-Preset Warning Speaker Downlink Authorizer */}
                 <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 font-mono space-y-3">
-                  <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                  <div className="flex flex-wrap items-center justify-between border-b border-zinc-900 pb-2 gap-2">
                     <div className="flex items-center gap-2">
                       <Radio className="w-4 h-4 text-cyan-400" />
                       <span className="text-xs font-bold text-white uppercase tracking-wider">
-                        Direct Downlink Warning Speaker Authorizer
+                        Direct Downlink Audio Warning Console
                       </span>
                     </div>
-                    <span className="text-[10px] text-zinc-500">433/866 MHz LoRa Mesh</span>
+                    
+                    {/* Serial Gateway Status & Release/Reconnect Button */}
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${
+                        serialState.connected 
+                          ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                          : (serialState.paused 
+                              ? 'bg-amber-950/80 text-amber-400 border border-amber-800'
+                              : 'bg-zinc-900 text-zinc-400 border border-zinc-800')
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          serialState.connected ? 'bg-emerald-400 animate-pulse' : (serialState.paused ? 'bg-amber-400' : 'bg-zinc-500')
+                        }`} />
+                        {serialState.connected ? `ESP Gateway: ${serialState.port || 'COM7'}` : (serialState.paused ? 'Port Released (Upload Mode)' : 'Gateway Offline')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleToggleSerialPort}
+                        className={`text-[9px] px-2 py-0.5 rounded border transition font-bold cursor-pointer ${
+                          serialState.paused
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
+                            : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
+                        }`}
+                        title={serialState.paused ? "Reconnect serial bridge to ESP Gateway" : "Temporarily disconnect serial port so you can flash via Arduino IDE without PermissionError"}
+                      >
+                        {serialState.paused ? 'Reconnect Gateway' : 'Release Port for Arduino IDE'}
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-zinc-400">
-                    Authorize and transmit immediate audio warning broadcasts to field nodes with DFPlayer Mini modules:
-                  </p>
+
+                  {/* Target Zone Selector */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-zinc-400 font-bold uppercase">Target Zone Destination:</span>
+                      <span className="text-cyan-400 text-[10px] font-bold">
+                        {broadcastTargetZone === 0 ? '📢 BROADCAST TO ALL ZONES (z=0)' : `📍 TARGETED TO ZONE ${broadcastTargetZone} (z=${broadcastTargetZone})`}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setBroadcastTargetZone(0)}
+                        className={`py-1.5 px-2 rounded text-xs font-bold transition border cursor-pointer ${
+                          broadcastTargetZone === 0
+                            ? 'bg-red-600 text-white border-red-400 shadow-[0_0_12px_rgba(239,68,68,0.4)]'
+                            : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        ALL ZONES (0)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBroadcastTargetZone(1)}
+                        className={`py-1.5 px-2 rounded text-xs font-bold transition border cursor-pointer ${
+                          broadcastTargetZone === 1
+                            ? 'bg-cyan-600 text-white border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.4)]'
+                            : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        Zone A (Z1)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBroadcastTargetZone(2)}
+                        className={`py-1.5 px-2 rounded text-xs font-bold transition border cursor-pointer ${
+                          broadcastTargetZone === 2
+                            ? 'bg-cyan-600 text-white border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.4)]'
+                            : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        Zone B (Z2)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBroadcastTargetZone(3)}
+                        className={`py-1.5 px-2 rounded text-xs font-bold transition border cursor-pointer ${
+                          broadcastTargetZone === 3
+                            ? 'bg-cyan-600 text-white border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.4)]'
+                            : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        Zone C (Z3)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Feedback Banner */}
+                  {broadcastFeedback && (
+                    <div className={`p-2 rounded text-xs border flex items-center justify-between ${
+                      broadcastFeedback.ok 
+                        ? 'bg-emerald-950/80 border-emerald-700 text-emerald-200' 
+                        : 'bg-red-950/80 border-red-700 text-red-200'
+                    }`}>
+                      <div className="flex items-center gap-1.5">
+                        <span>{broadcastFeedback.ok ? '✓' : '✗'}</span>
+                        <span>
+                          {broadcastFeedback.ok
+                            ? `Transmitted Track ${broadcastFeedback.track} to ${broadcastFeedback.targetZ === 0 ? 'ALL ZONES (Universal Broadcast)' : `Zone ${broadcastFeedback.targetZ}`} via ESP-NOW Mesh & USB Serial!`
+                            : `Dispatch failed: ${broadcastFeedback.err || 'Server did not acknowledge'}`}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400">{broadcastFeedback.time}</span>
+                    </div>
+                  )}
+
+                  {/* 3 Preset Action Cards */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                     <button
+                      type="button"
                       onClick={() => handleRespondToEmergency(1)}
-                      className="bg-red-950/80 hover:bg-red-900 border border-red-700 text-red-200 p-2.5 rounded-lg text-left transition space-y-1 group"
+                      className="bg-red-950/80 hover:bg-red-900 border border-red-700 text-red-200 p-2.5 rounded-lg text-left transition space-y-1 group cursor-pointer"
                     >
                       <div className="flex justify-between items-center text-[10px] text-red-400 font-bold">
-                        <span>PRESET 1</span>
-                        <span>0001.mp3</span>
+                        <span>PRESET 1 • PLAY NOW</span>
+                        <span className="bg-red-900/60 px-1 rounded">0001.mp3</span>
                       </div>
                       <div className="text-xs font-bold text-white flex items-center gap-1">
                         <span>🚨 Emergency Evac</span>
@@ -4308,14 +4471,18 @@ export default function App() {
                       <p className="text-[10px] text-red-300/80 leading-tight">
                         "Attention please, an emergency has occurred. Please walk calmly towards designated exit gates."
                       </p>
+                      <div className="text-[9px] text-red-400 pt-1 border-t border-red-900/60 font-mono">
+                        Target: {broadcastTargetZone === 0 ? 'ALL NODES (z=0)' : `Zone ${broadcastTargetZone}`} ➔
+                      </div>
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleRespondToEmergency(2)}
-                      className="bg-amber-950/80 hover:bg-amber-900 border border-amber-700 text-amber-200 p-2.5 rounded-lg text-left transition space-y-1 group"
+                      className="bg-amber-950/80 hover:bg-amber-900 border border-amber-700 text-amber-200 p-2.5 rounded-lg text-left transition space-y-1 group cursor-pointer"
                     >
                       <div className="flex justify-between items-center text-[10px] text-amber-400 font-bold">
-                        <span>PRESET 2</span>
-                        <span>0002.mp3</span>
+                        <span>PRESET 2 • PLAY NOW</span>
+                        <span className="bg-amber-900/60 px-1 rounded">0002.mp3</span>
                       </div>
                       <div className="text-xs font-bold text-white flex items-center gap-1">
                         <span>⚠️ Crowd Caution</span>
@@ -4323,14 +4490,18 @@ export default function App() {
                       <p className="text-[10px] text-amber-300/80 leading-tight">
                         "Attention, heavy crowd congestion ahead. Please slow down, avoid pushing, and maintain space."
                       </p>
+                      <div className="text-[9px] text-amber-400 pt-1 border-t border-amber-900/60 font-mono">
+                        Target: {broadcastTargetZone === 0 ? 'ALL NODES (z=0)' : `Zone ${broadcastTargetZone}`} ➔
+                      </div>
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleRespondToEmergency(3)}
-                      className="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 p-2.5 rounded-lg text-left transition space-y-1 group"
+                      className="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 p-2.5 rounded-lg text-left transition space-y-1 group cursor-pointer"
                     >
                       <div className="flex justify-between items-center text-[10px] text-emerald-400 font-bold">
-                        <span>PRESET 3</span>
-                        <span>0003.mp3</span>
+                        <span>PRESET 3 • PLAY NOW</span>
+                        <span className="bg-emerald-900/60 px-1 rounded">0003.mp3</span>
                       </div>
                       <div className="text-xs font-bold text-white flex items-center gap-1">
                         <span>✅ All Clear</span>
@@ -4338,6 +4509,9 @@ export default function App() {
                       <p className="text-[10px] text-emerald-300/80 leading-tight">
                         "Attention, the situation is now under control and safe. Please remain in place calmly."
                       </p>
+                      <div className="text-[9px] text-emerald-400 pt-1 border-t border-emerald-900/60 font-mono">
+                        Target: {broadcastTargetZone === 0 ? 'ALL NODES (z=0)' : `Zone ${broadcastTargetZone}`} ➔
+                      </div>
                     </button>
                   </div>
                 </div>
