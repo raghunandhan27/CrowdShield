@@ -2249,6 +2249,7 @@ class HazardTriggerReq(BaseModel):
     zone_id: str
     hazard_type: str = "FIRE"
     severity: str = "CRITICAL"
+    source: Optional[str] = "GROUND_STAFF_OR_CCTV"
     user: str = "Operator_Raghu"
 
 
@@ -2494,6 +2495,7 @@ async def trigger_hazard_isolation(req: HazardTriggerReq):
         "ok": True,
         "isolated_zone": req.zone_id,
         "hazard_type": req.hazard_type.upper(),
+        "source": getattr(req, "source", "GROUND_STAFF_OR_CCTV"),
         "serial_dispatched": serial_dispatched,
         "rerouted_paths": res["evacuation"],
         "routes": res["evacuation"],

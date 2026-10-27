@@ -175,7 +175,8 @@ const INSTRUCTION_PRESETS = [
 
 
 // ============================================================================
-// AUTOMATIC FIRE DETECTION, NETWORKX REROUTING & OLED SIGNBOARD MATRIX PANEL
+// GROUND STAFF & CCTV FIRE INCIDENT REPORTING & DYNAMIC ROUTE NAVIGATION DESK
+// (100% Software-Driven • Zero Hardware Dependency • Real-Time Dijkstra Graph)
 // ============================================================================
 function EmergencyHazardPanel({
   activeHazards,
@@ -190,8 +191,9 @@ function EmergencyHazardPanel({
 }) {
   const isHazardActive = Boolean(activeHazards?.has_hazard);
   const isolatedKeys = Object.keys(activeHazards?.isolated_zones || {});
+  const [reportSource, setReportSource] = useState('CCTV_FEED');
 
-  // Pre-generate 4-node signboard displays with live broadcast overlay
+  // Pre-generate 4-node public signboard & ground staff instructions
   const displayNodes = useMemo(() => {
     const list = [
       { z_num: 1, zone_id: 'z1', name: 'Zone A (Main Plaza)', defaultExit: 'GATE A' },
@@ -216,7 +218,9 @@ function EmergencyHazardPanel({
           route: liveBroadcast.route || (isCompromised ? 'EVACUATE DIRECT' : `SAFE ROUTE: ${routeInfo?.target_exit || item.defaultExit}`),
           arrow: liveBroadcast.arrow || (item.z_num === 1 ? '◀ GATE A' : 'GATE B ▶'),
           exit: liveBroadcast.exit || routeInfo?.target_exit || item.defaultExit,
-          raw_serial: liveBroadcast.raw_serial || liveBroadcast.pipe_payload || `${item.z_num}|3|${liveBroadcast.header}|${liveBroadcast.route}`,
+          staffScript: isCompromised
+            ? 'Radio: "Perimeter locked. Marshals preventing crowd entry. Evacuate via nearest portal."'
+            : `Radio: "Directing all visitors in ${item.name} calmly towards ${routeInfo?.target_exit || item.defaultExit}."`,
           isCompromised
         };
       }
@@ -230,7 +234,9 @@ function EmergencyHazardPanel({
           route: isCompromised ? 'EVACUATE DIRECT' : `SAFE ROUTE: ${routeInfo?.target_exit || item.defaultExit}`,
           arrow: item.z_num === 1 ? '◀ GATE A' : 'GATE B ▶',
           exit: routeInfo?.target_exit || item.defaultExit,
-          raw_serial: `${item.z_num}|3|${isCompromised ? 'FIRE HERE' : 'AVOID FIRE'}|SAFE: ${routeInfo?.target_exit || item.defaultExit}`,
+          staffScript: isCompromised
+            ? 'Radio: "Fire active here! Perimeter locked. Evacuate direct."'
+            : `Radio: "Attention: Guide visitors in ${item.name} towards ${routeInfo?.target_exit || item.defaultExit}."`,
           isCompromised
         };
       }
@@ -239,10 +245,10 @@ function EmergencyHazardPanel({
         ...item,
         level: 1,
         header: 'STATUS: NORMAL',
-        route: `EGRESS: ${item.defaultExit}`,
+        route: `SAFE EXIT: ${item.defaultExit}`,
         arrow: item.z_num === 1 ? '◀ GATE A' : 'GATE B ▶',
         exit: item.defaultExit,
-        raw_serial: `${item.z_num}|1|NORMAL OPERATION|FOLLOW SIGNS`,
+        staffScript: 'Radio: "Venue status normal. Standard flow maintenance."',
         isCompromised: false
       };
     });
@@ -255,29 +261,32 @@ function EmergencyHazardPanel({
         <div className="flex items-center gap-2">
           <Flame className={`w-4 h-4 ${isHazardActive ? 'text-red-500 animate-pulse' : 'text-zinc-500'}`} />
           <span className="text-xs font-bold text-white uppercase tracking-wider">
-            Automatic Fire Incident Isolation &amp; Safest Route Recalculation
+            Ground Staff &amp; CCTV Incident Reporting Desk • Dynamic Safest Evacuation Navigation
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-950 border border-red-800 text-red-300 font-bold">
-            LoRa 433MHz • ESP-NOW
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-750 text-cyan-300 font-bold">
+            📹 CCTV Observation
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-emerald-400">
-            KY-026 Flame Sensor (GPIO 35)
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-750 text-amber-300 font-bold">
+            📻 Ground Staff Radio
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-750 text-emerald-400 font-bold">
+            ⚡ 100% Software-Driven
           </span>
         </div>
       </div>
 
-      {/* 1-Click Fire Simulation Drill Buttons */}
+      {/* 1-Click Fast Incident Reporting Buttons */}
       <div className="space-y-1.5">
         <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wide flex items-center justify-between">
-          <span>Instant Emergency Drill Simulators (Dijkstra Hazard-Aware Rerouting):</span>
-          <span className="text-zinc-500 text-[9px]">1-Click Trigger / Reset</span>
+          <span>Report Incident (From Ground Staff Radio or CCTV Camera Feed):</span>
+          <span className="text-zinc-500 text-[9px]">1-Click Operator Logging</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
           <button
             type="button"
-            onClick={() => handleTriggerHazard('z2', 'FIRE')}
+            onClick={() => handleTriggerHazard('z2', 'FIRE', 'GROUND_STAFF_OR_CCTV')}
             className={`py-1.5 px-2 rounded text-[11px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
               isolatedKeys.includes('z2')
                 ? 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
@@ -290,7 +299,7 @@ function EmergencyHazardPanel({
 
           <button
             type="button"
-            onClick={() => handleTriggerHazard('z1', 'FIRE')}
+            onClick={() => handleTriggerHazard('z1', 'FIRE', 'GROUND_STAFF_OR_CCTV')}
             className={`py-1.5 px-2 rounded text-[11px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
               isolatedKeys.includes('z1')
                 ? 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
@@ -303,7 +312,7 @@ function EmergencyHazardPanel({
 
           <button
             type="button"
-            onClick={() => handleTriggerHazard('z3', 'FIRE')}
+            onClick={() => handleTriggerHazard('z3', 'FIRE', 'GROUND_STAFF_OR_CCTV')}
             className={`py-1.5 px-2 rounded text-[11px] font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
               isolatedKeys.includes('z3')
                 ? 'bg-red-600 text-white border-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
@@ -325,45 +334,45 @@ function EmergencyHazardPanel({
         </div>
       </div>
 
-      {/* Active Hazard Emergency Instruction Banner */}
+      {/* Active Incident Emergency Navigation Banner */}
       {isHazardActive && (
         <div className="p-3 rounded-lg bg-red-950/90 border border-red-600 text-xs space-y-2.5 animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.3)]">
           <div className="flex items-center justify-between text-red-200 font-bold">
             <span className="flex items-center gap-2 text-sm text-red-300">
               <AlertTriangle className="w-4 h-4 text-red-400 animate-bounce" />
-              CRITICAL FIRE DETECTED: {isolatedKeys.map(z => z.toUpperCase()).join(', ')} COMPROMISED!
+              CRITICAL FIRE INCIDENT CONFIRMED IN ZONE {isolatedKeys.map(z => z.toUpperCase()).join(', ')}!
             </span>
             <span className="text-[10px] bg-red-900 text-white px-2 py-0.5 rounded border border-red-500 font-bold">
-              EDGE COST = ∞ (LOCKED)
+              PERIMETER LOCKED (COST = ∞)
             </span>
           </div>
 
           <div className="bg-black/70 p-2.5 rounded border border-red-800/80 space-y-1.5 text-[11px]">
             <div className="text-amber-300 font-bold flex items-center gap-1.5">
-              <span>📢 LIVE EVACUATION INSTRUCTIONS BROADCAST:</span>
+              <span>📢 DYNAMIC EVACUATION GUIDANCE (GROUND MARSHALS &amp; PUBLIC DISPLAYS):</span>
             </div>
             {displayNodes.map(n => (
               <div key={n.zone_id} className="flex items-center justify-between font-mono">
                 <span className={n.isCompromised ? 'text-red-400 font-bold' : 'text-zinc-300'}>
-                  • {n.name}: {n.isCompromised ? '⚠️ FIRE LOCATION! DO NOT ENTER. EVACUATE DIRECT TO SAFETY' : `Safe egress via ${n.exit}`}
+                  • {n.name}: {n.isCompromised ? '⚠️ FIRE LOCATION! DO NOT ENTER. Marshals diverting crowds away.' : `Safest evacuation route → ${n.exit}`}
                 </span>
                 <span className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold ${n.isCompromised ? 'bg-red-950 text-red-300 border border-red-700' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'}`}>
-                  {n.isCompromised ? 'PERIMETER LOCKED' : `ROUTED → ${n.exit}`}
+                  {n.isCompromised ? 'SECTOR ISOLATED' : `ROUTED → ${n.exit}`}
                 </span>
               </div>
             ))}
           </div>
           <p className="text-[10px] text-zinc-400 leading-tight">
-            NetworkX dynamic pathfinding has isolated the fire sector. All adjacent corridors are set to cost ∞. Safe exit vectors are actively calculated and pushed via Gateway USB Serial.
+            NetworkX dynamic Dijkstra pathfinding has instantly locked all walkways intersecting the fire zone. Real-time escape corridors and digital signboards are recalculated automatically away from danger.
           </p>
         </div>
       )}
 
-      {/* Physical Digital Signboards (SSD1306 OLED Display Simulator Cards) */}
+      {/* Public Digital Signboards & Ground Staff Radio Scripts */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 uppercase">
-          <span>Physical Zonal Node Digital Signboards (SSD1306 0.96" OLED • 128x64 I2C):</span>
-          <span className="text-zinc-500 text-[9px]">UART / Serial: 115200 Baud</span>
+          <span>Public Digital Signboards &amp; Ground Staff Radio Scripts:</span>
+          <span className="text-zinc-500 text-[9px]">Synchronized Wayfinding Matrix</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           {displayNodes.map((n) => (
@@ -378,9 +387,9 @@ function EmergencyHazardPanel({
               }`}
             >
               <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
-                <span className="text-cyan-400 font-bold">NODE {n.z_num} [{n.zone_id.toUpperCase()}]</span>
+                <span className="text-cyan-400 font-bold">SIGNBOARD {n.z_num} [{n.zone_id.toUpperCase()}]</span>
                 <span className={`text-[8.5px] px-1 py-0.2 rounded ${n.isCompromised ? 'bg-red-900 text-white' : 'bg-zinc-900 text-zinc-400'}`}>
-                  {n.isCompromised ? '🔥 HAZARD' : 'OLED 0x3C'}
+                  {n.isCompromised ? '🔥 DANGER' : 'ACTIVE'}
                 </span>
               </div>
               <div className="bg-black border border-zinc-900 rounded p-1.5 space-y-0.5 text-center">
@@ -392,22 +401,33 @@ function EmergencyHazardPanel({
                 </div>
                 <div className="text-[9px] text-zinc-400 flex items-center justify-center gap-1 pt-0.5 border-t border-zinc-900">
                   <span className="text-emerald-400 font-bold">{n.arrow}</span>
-                  <span className="text-zinc-600">|</span>
-                  <span className="text-zinc-400 text-[8.5px]">LED: {n.z_num === 1 ? 'GPIO 18' : 'GPIO 19'}</span>
                 </div>
               </div>
-              <div className="text-[8px] text-zinc-600 truncate font-mono" title={n.raw_serial}>
-                TX: {n.raw_serial}
+              <div className="text-[8.5px] text-zinc-400 italic truncate" title={n.staffScript}>
+                {n.staffScript}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Manual Sector Hazard Controls & Custom Override */}
-      <div className="pt-2 border-t border-zinc-900 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+      {/* Manual Ground Staff / CCTV Incident Intake Form */}
+      <div className="pt-2 border-t border-zinc-900 grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
         <div>
-          <label className="text-[10px] text-zinc-400 block mb-1">SELECT SECTOR FOR OVERRIDE</label>
+          <label className="text-[10px] text-zinc-400 block mb-1">INCIDENT SOURCE</label>
+          <select
+            value={reportSource}
+            onChange={(e) => setReportSource(e.target.value)}
+            className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
+          >
+            <option value="CCTV_FEED">📹 CCTV Visual Observation</option>
+            <option value="GROUND_STAFF">📻 Ground Staff Radio Report</option>
+            <option value="FIELD_PATROL">🚶 Volunteer / Patrol Sighting</option>
+            <option value="VISITOR_SOS">🚨 Visitor Emergency Helpdesk</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-zinc-400 block mb-1">AFFECTED SECTOR</label>
           <select
             value={selectedHazardZone}
             onChange={(e) => setSelectedHazardZone(e.target.value)}
@@ -420,25 +440,25 @@ function EmergencyHazardPanel({
           </select>
         </div>
         <div>
-          <label className="text-[10px] text-zinc-400 block mb-1">HAZARD SEVERITY / NATURE</label>
+          <label className="text-[10px] text-zinc-400 block mb-1">INCIDENT NATURE</label>
           <select
             value={selectedHazardType}
             onChange={(e) => setSelectedHazardType(e.target.value)}
             className="w-full bg-black border border-zinc-800 rounded p-1.5 text-xs text-white font-mono focus:border-red-500"
           >
-            <option value="FIRE">🔥 Fire Outbreak (Flame / Smoke)</option>
-            <option value="CRITICAL HAZARD">⚠️ Critical Density Surge / Stampede Risk</option>
+            <option value="FIRE">🔥 Confirmed Fire / Heavy Smoke</option>
+            <option value="CRITICAL HAZARD">⚠️ Dangerous Crush / Stampede Hazard</option>
             <option value="STRUCTURAL">💥 Structural Obstruction / Wall Collapse</option>
           </select>
         </div>
         <div className="flex items-end gap-1.5">
           <button
             type="button"
-            onClick={() => handleTriggerHazard(selectedHazardZone, selectedHazardType)}
+            onClick={() => handleTriggerHazard(selectedHazardZone, selectedHazardType, reportSource)}
             className="flex-1 py-1.5 px-2 rounded bg-red-950 hover:bg-red-900 border border-red-700 text-red-200 text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
           >
             <Flame className="w-3.5 h-3.5 text-red-400" />
-            <span>ISOLATE &amp; REROUTE</span>
+            <span>LOG INCIDENT &amp; REROUTE</span>
           </button>
           {isHazardActive && (
             <button
@@ -1368,7 +1388,7 @@ export default function App() {
     }
   };
 
-  const handleTriggerHazard = async (zoneId, hazardType) => {
+  const handleTriggerHazard = async (zoneId, hazardType, source = 'GROUND_STAFF_OR_CCTV') => {
     try {
       const res = await fetch('http://localhost:8000/api/hazard/trigger', {
         method: 'POST',
@@ -1376,7 +1396,9 @@ export default function App() {
         body: JSON.stringify({
           zone_id: zoneId || 'z2',
           hazard_type: hazardType || 'FIRE',
-          severity: 'CRITICAL'
+          severity: 'CRITICAL',
+          source: source,
+          user: source === 'CCTV_CAMERA' ? 'CCTV_Operator' : 'Ground_Staff_Radio'
         })
       });
       const data = await res.json();
@@ -2130,11 +2152,30 @@ export default function App() {
                               setSelectedZoneKey(zKey);
                               setActiveTab('MAP');
                             }}
-                            className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-200 flex items-center gap-1 transition"
+                            className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-200 flex items-center gap-1 transition cursor-pointer"
                           >
                             <MapPin className="w-3 h-3 text-emerald-400" />
-                            <span>View on GIS Map [2]</span>
+                            <span>GIS Map</span>
                           </button>
+                          {Boolean(activeHazards?.isolated_zones && (activeHazards.isolated_zones[zKey] || activeHazards.isolated_zones[cam.zone_id?.toLowerCase()])) ? (
+                            <button
+                              onClick={() => handleClearHazard(zKey)}
+                              className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-600 text-[10px] font-mono text-emerald-200 font-bold flex items-center gap-1 transition cursor-pointer"
+                              title="Clear fire incident and restore normal circulation"
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>CLEAR FIRE</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleTriggerHazard(zKey, 'FIRE', 'CCTV_CAMERA')}
+                              className="px-2 py-0.5 rounded bg-red-950/80 hover:bg-red-900 border border-red-700 text-[10px] font-mono text-red-200 font-bold flex items-center gap-1 transition cursor-pointer"
+                              title={`Report Fire in ${zoneObj.name} based on CCTV visual feed`}
+                            >
+                              <Flame className="w-3 h-3 text-orange-400 animate-pulse" />
+                              <span>REPORT FIRE</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3048,11 +3089,30 @@ export default function App() {
                               setSelectedZoneKey(zKey);
                               setActiveTab('MAP');
                             }}
-                            className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-200 flex items-center gap-1 transition"
+                            className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-200 flex items-center gap-1 transition cursor-pointer"
                           >
                             <MapPin className="w-3 h-3 text-emerald-400" />
-                            <span>View on GIS Map [2]</span>
+                            <span>GIS Map</span>
                           </button>
+                          {Boolean(activeHazards?.isolated_zones && (activeHazards.isolated_zones[zKey] || activeHazards.isolated_zones[cam.zone_id?.toLowerCase()])) ? (
+                            <button
+                              onClick={() => handleClearHazard(zKey)}
+                              className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-600 text-[10px] font-mono text-emerald-200 font-bold flex items-center gap-1 transition cursor-pointer"
+                              title="Clear fire incident and restore normal circulation"
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>CLEAR FIRE</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleTriggerHazard(zKey, 'FIRE', 'CCTV_CAMERA')}
+                              className="px-2 py-0.5 rounded bg-red-950/80 hover:bg-red-900 border border-red-700 text-[10px] font-mono text-red-200 font-bold flex items-center gap-1 transition cursor-pointer"
+                              title={`Report Fire in ${zoneObj.name} based on CCTV visual feed`}
+                            >
+                              <Flame className="w-3 h-3 text-orange-400 animate-pulse" />
+                              <span>REPORT FIRE</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
