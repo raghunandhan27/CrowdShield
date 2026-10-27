@@ -224,6 +224,8 @@ export default function App() {
   const [kumbhAnalysis, setKumbhAnalysis] = useState(null);
   const [isAnalyzingKumbh, setIsAnalyzingKumbh] = useState(false);
   const [showKumbhModal, setShowKumbhModal] = useState(false);
+  const [multiApiActive, setMultiApiActive] = useState(false);
+  const [isScenarioLoading, setIsScenarioLoading] = useState(false);
 
   // Medical Dispatch Desk State (Requirement #4)
   const [activeMedicalIncident, setActiveMedicalIncident] = useState(null);
@@ -725,6 +727,59 @@ export default function App() {
       console.error('Failed to run Maha Kumbh Analysis:', err);
     } finally {
       setIsAnalyzingKumbh(false);
+    }
+  };
+
+  const handleLoadMultiApiScenario = async () => {
+    setIsScenarioLoading(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/demo/load_multi_api_scenario', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        setMultiApiActive(true);
+        if (data.active_hazards) setActiveHazards(data.active_hazards);
+        if (data.blocked_edges) setBlockedEdges(data.blocked_edges);
+        if (data.gis_routing) setGisRouting(data.gis_routing);
+        if (data.broadcasts) setHazardBroadcasts(data.broadcasts);
+        if (data.zones) {
+          setZones(prev => prev.map(z => {
+            const sc = data.zones[z.key];
+            if (!sc) return z;
+            return {
+              ...z,
+              personCount: sc.personCount,
+              density: sc.density,
+              currentDensity: sc.density,
+              level: sc.level,
+              speed: sc.speed,
+              conflict: sc.conflict,
+              flowRate: sc.flowRate,
+              api_name: sc.api_name,
+              api_mode: sc.api_mode
+            };
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load multi-API scenario:', err);
+    } finally {
+      setIsScenarioLoading(false);
+    }
+  };
+
+  const handleResetDemo = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/demo/reset', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        setMultiApiActive(false);
+        setActiveHazards({ has_hazard: false, isolated_zones: {} });
+        setBlockedEdges([]);
+        setHazardBroadcasts([]);
+        setZones(DEFAULT_ZONES);
+      }
+    } catch (err) {
+      console.error('Failed to reset demo:', err);
     }
   };
 
@@ -1349,7 +1404,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => handleRunKumbhAnalysis(false)}
                     disabled={isAnalyzingKumbh}
@@ -1369,6 +1424,27 @@ export default function App() {
                     <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzingKumbh ? 'animate-spin' : ''}`} />
                     <span>INGEST & OVERWRITE GIS</span>
                   </button>
+
+                  <button
+                    onClick={handleLoadMultiApiScenario}
+                    disabled={isScenarioLoading}
+                    className="px-2.5 py-1.5 rounded bg-cyan-500/10 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/20 text-[11px] font-bold inline-flex items-center gap-1.5 transition disabled:opacity-50 shadow-[0_0_10px_rgba(6,182,212,0.15)]"
+                    title="Load 3-Zone Multi-Density Scenario showing API 1 (YOLO), API 2 (CSRNet), API 3 (Farneback), and GIS Rerouting"
+                  >
+                    <SlidersHorizontal className={`w-3.5 h-3.5 ${isScenarioLoading ? 'animate-spin' : ''}`} />
+                    <span>{isScenarioLoading ? 'LOADING...' : 'LOAD 3-ZONE MULTI-API DEMO'}</span>
+                  </button>
+
+                  {multiApiActive && (
+                    <button
+                      onClick={handleResetDemo}
+                      className="px-2 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 text-[11px] font-bold inline-flex items-center gap-1 transition"
+                      title="Reset all zones to baseline flow"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>RESET</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1425,6 +1501,158 @@ export default function App() {
                   );
                 })}
               </div>
+
+              {/* 3-ZONE MULTI-API & GIS SPATIAL CORRELATION SHOWCASE CARD */}
+              {multiApiActive && (
+                <div className="p-3 rounded-lg bg-black border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.12)] space-y-3 font-mono">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+                      <span className="font-bold text-white text-xs tracking-wide">
+                        LIVE 3-ZONE MULTI-API & GIS SPATIAL CORRELATION ACTIVE
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                      <span>GIS Engine:</span>
+                      <span className="text-red-400 font-bold bg-red-950/80 px-1.5 py-0.5 rounded border border-red-600/50">
+                        ZONE B ISOLATED (∞ WEIGHT) • DYNAMIC NETWORKX REROUTE
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3 Zone Comparative Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Zone 1: YOLOv8 High-Res Ground Homography */}
+                    <div className="p-2.5 rounded bg-zinc-950 border border-emerald-500/40 space-y-2">
+                      <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-emerald-400 block">ZONE A — MAIN PLAZA</span>
+                          <span className="text-[9px] text-zinc-500">GIS Area: 320 m² • Cap: 450</span>
+                        </div>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-600/40">
+                          SAFE (LoS A)
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-center py-1 bg-black rounded border border-zinc-900">
+                        <div>
+                          <span className="text-[8px] text-zinc-500 block">DENSITY</span>
+                          <span className="text-base font-bold text-emerald-400">1.15 p/m²</span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-zinc-500 block">YOLO COUNT</span>
+                          <span className="text-sm font-bold text-white">368 PAX</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-[10px] border-t border-zinc-900 pt-1.5">
+                        <div className="text-zinc-200">
+                          <strong className="text-emerald-400">API 1:</strong> YOLOv8 Ground Homography
+                        </div>
+                        <div className="text-zinc-500 text-[9px]">
+                          Sparse Regime (&lt;2.0 p/m²). Perspective Footprint (Hm). Free velocity: 1.28 m/s.
+                        </div>
+                        <div className="text-emerald-400 text-[9px] font-bold flex items-center gap-1">
+                          <Navigation className="w-3 h-3" />
+                          GIS Route: Normal Egress via Gate A
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Zone 2: CSRNet Neural Density-Map Regression (Maha Kumbh Crush) */}
+                    <div className="p-2.5 rounded bg-zinc-950 border border-red-500/60 shadow-[0_0_12px_rgba(239,68,68,0.2)] space-y-2 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 bg-red-600 text-black font-extrabold text-[8px] px-2 py-0.5 uppercase tracking-wider">
+                        GIS ISOLATED
+                      </div>
+                      <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-red-400 block">ZONE B — CORRIDOR CHOKE</span>
+                          <span className="text-[9px] text-zinc-500">GIS Area: 95 m² • Cap: 120 (460% Saturation)</span>
+                        </div>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-950 text-red-400 border border-red-600">
+                          CRUSH (LoS F)
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-center py-1 bg-black rounded border border-zinc-900">
+                        <div>
+                          <span className="text-[8px] text-zinc-500 block">TRUE DENSITY</span>
+                          <span className="text-base font-bold text-red-400 animate-pulse">5.82 p/m²</span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-zinc-500 block">INTEGRAL COUNT</span>
+                          <span className="text-sm font-bold text-white">553 PAX</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-[10px] border-t border-zinc-900 pt-1.5">
+                        <div className="text-zinc-200">
+                          <strong className="text-red-400">API 2:</strong> CSRNet Neural Density-Map
+                        </div>
+                        <div className="text-zinc-500 text-[9px]">
+                          Dilated-CNN Field Integral (∬ D dA). Standstill shockwaves: 0.12 m/s.
+                        </div>
+                        <div className="text-red-400 text-[9px] font-bold flex items-center gap-1">
+                          <ShieldAlert className="w-3 h-3" />
+                          GIS Reaction: Edge Locked • Wireless LoRa: Reroute via Gate C
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Zone 3: Optical Flow Farnebäck Conflict Detector */}
+                    <div className="p-2.5 rounded bg-zinc-950 border border-amber-500/50 space-y-2">
+                      <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                        <div>
+                          <span className="text-[10px] font-bold text-amber-400 block">ZONE C — STAGE ARENA</span>
+                          <span className="text-[9px] text-zinc-500">GIS Area: 480 m² • Cap: 700</span>
+                        </div>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950 text-amber-400 border border-amber-600/40">
+                          CAUTION (LoS D)
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-center py-1 bg-black rounded border border-zinc-900">
+                        <div>
+                          <span className="text-[8px] text-zinc-500 block">DENSITY</span>
+                          <span className="text-base font-bold text-amber-400">3.35 p/m²</span>
+                        </div>
+                        <div>
+                          <span className="text-[8px] text-zinc-500 block">HEAD COUNT</span>
+                          <span className="text-sm font-bold text-white">1,608 PAX</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-[10px] border-t border-zinc-900 pt-1.5">
+                        <div className="text-zinc-200">
+                          <strong className="text-amber-400">API 3:</strong> Farnebäck Optical Flow Conflict
+                        </div>
+                        <div className="text-zinc-500 text-[9px]">
+                          Directional Variance C = 1 - ||Σ v|| / (Σ ||v|| + ε) = 0.68. Counter-flow push.
+                        </div>
+                        <div className="text-amber-300 text-[9px] font-bold flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3" />
+                          GIS Route: Divert via Zone D to Gate B (Bypass Choke)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GIS NetworkX Safe-Zone Rerouting Pipeline Banner */}
+                  <div className="p-2 rounded bg-black border border-zinc-800 text-[10px] flex flex-wrap items-center justify-between gap-2 text-zinc-400">
+                    <div className="flex items-center gap-1.5">
+                      <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="text-white font-bold">GIS Spatial Engine:</span>
+                      <span>Corridor edges to Zone B set to <strong className="text-red-400">∞ (Infinity cost)</strong> in NetworkX graph.</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-400 font-bold">Safe Calculated Egress:</span>
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-white font-mono border border-zinc-700">
+                        Zone C → Zone D (Concourse) → Gate B (North Emergency Exit)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Active Kumbh Diagnostic Output Banner (if triggered) */}
               {kumbhAnalysis && (

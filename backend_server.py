@@ -1699,12 +1699,130 @@ async def demo_reset_all():
             })
     state["blocked_edges"] = []
     state["active_medical_incident"] = None
+    gis_manager.clear_zone_hazard(None)
+    state["active_hazards"] = gis_manager.get_active_hazards()
+    state["hazard_broadcasts"] = []
     for n in state["nodes"].values():
         n["sos"] = 0
     vision_manager.is_crush_regime = False
     log_operator_action("Judge_Simulator", "DEMO_RESET", "Reset all zones to baseline flow.")
     await broadcast_state()
     return {"ok": True, "message": "Demo state reset to clean baseline."}
+
+
+@app.post("/api/demo/load_multi_api_scenario")
+@app.get("/api/demo/load_multi_api_scenario")
+async def load_multi_api_scenario():
+    """
+    Loads 3-Zone Multi-Density & Multi-API Demonstration Scenario:
+    - Zone 1 (Plaza): 1.15 pax/m² (Level 0 SAFE) via API 1: YOLOv8 High-Res Ground Homography
+    - Zone 2 (Choke): 5.82 pax/m² (Level 3 CRITICAL) via API 2: CSRNet Continuous Density-Map Regression
+    - Zone 3 (Arena): 3.35 pax/m² (Level 2 CAUTION) via API 3: Farnebäck Optical Flow & Directional Conflict (C=0.68)
+    - GIS Spatial Graph: Dynamically isolates Zone 2, recalculates NetworkX evacuation paths bypassing Zone 2,
+      and dispatches LoRa/ESP-NOW wireless downlinks to on-ground digital nodes.
+    """
+    scenario_zones = {
+        "z1": {
+            "name": "Zone A — Main Gate Plaza",
+            "personCount": 368,
+            "density": 1.15,
+            "capacity": 450,
+            "level": 0,
+            "speed": 1.28,
+            "conflict": 0.08,
+            "flowRate": 4.2,
+            "api_name": "API 1: YOLOv8 High-Res Ground Homography",
+            "api_mode": "SPARSE REGIME (<2.0 p/m²)",
+            "api_method": "Bounding Boxes + 4-Point Homography Ground Projection",
+            "status": "SAFE / NORMAL FLOW"
+        },
+        "z2": {
+            "name": "Zone B — East Corridor Choke",
+            "personCount": 553,
+            "density": 5.82,
+            "capacity": 120,
+            "level": 3,
+            "speed": 0.12,
+            "conflict": 0.84,
+            "flowRate": 0.8,
+            "api_name": "API 2: CSRNet Neural Density-Map Regression",
+            "api_mode": "MAHA KUMBH CRUSH (>5.0 p/m²)",
+            "api_method": "Dilated-CNN Head Integral: Count = ∬ D(x,y) dA",
+            "status": "CRITICAL CRUSH / ISOLATED"
+        },
+        "z3": {
+            "name": "Zone C — Central Stage Arena",
+            "personCount": 1608,
+            "density": 3.35,
+            "capacity": 700,
+            "level": 2,
+            "speed": 0.48,
+            "conflict": 0.68,
+            "flowRate": 2.1,
+            "api_name": "API 3: Farnebäck Optical Flow Conflict Detector",
+            "api_mode": "TURBULENCE & COUNTER-FLOW (C=0.68)",
+            "api_method": "Directional Variance: C = 1 - ||Σ v_i|| / (Σ ||v_i|| + ε)",
+            "status": "HIGH CAUTION / PACING REQUIRED"
+        },
+        "z4": {
+            "name": "Zone D — North Exit Concourse",
+            "personCount": 204,
+            "density": 0.85,
+            "capacity": 350,
+            "level": 0,
+            "speed": 1.35,
+            "conflict": 0.04,
+            "flowRate": 5.6,
+            "api_name": "ACTIVE RELIEF CONCOURSE",
+            "api_mode": "SAFE DISCHARGE CORRIDOR",
+            "api_method": "Open Egress Corridor receiving diverted flow from Zone 2",
+            "status": "ACTIVE RELIEF ROUTE"
+        }
+    }
+
+    for zid, zdata in scenario_zones.items():
+        if zid in state["zones"]:
+            state["zones"][zid].update(zdata)
+
+    # Trigger GIS Spatial Isolation & NetworkX dynamic path recalculation for z2
+    hazard_res = gis_manager.trigger_zone_hazard("z2", "EXTREME_CRUSH", "CRITICAL")
+    state["active_hazards"] = gis_manager.get_active_hazards()
+    state["hazard_broadcasts"] = hazard_res.get("broadcasts", [])
+    state["blocked_edges"] = hazard_res.get("isolated_edges", ["corridor_z1_z2", "corridor_z2_z3"])
+
+    # Recalculate GIS routing
+    zone_levels = {zid: z["level"] for zid, z in state["zones"].items()}
+    routing = gis_manager.compute_gis_routing(zone_levels, state["blocked_edges"])
+    state["gis_routing"] = routing
+
+    # Generate visual CSRNet heatmap thumbnail preview
+    sim_heatmap = np.zeros((180, 320, 3), dtype=np.uint8)
+    cv2.circle(sim_heatmap, (240, 60), 55, (0, 0, 255), -1)
+    cv2.circle(sim_heatmap, (240, 60), 90, (0, 165, 255), -1)
+    cv2.circle(sim_heatmap, (240, 60), 125, (0, 255, 255), -1)
+    sim_heatmap = cv2.GaussianBlur(sim_heatmap, (45, 45), 0)
+    _, enc = cv2.imencode(".jpg", sim_heatmap, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    b64_kumbh = "data:image/jpeg;base64," + base64.b64encode(enc).decode("utf-8")
+    state["kumbh_heatmap_preview"] = b64_kumbh
+
+    vision_manager.is_crush_regime = True
+    log_operator_action(
+        "Operator_Raghu",
+        "LOAD_MULTI_API_SCENARIO",
+        "Loaded 3-Zone Multi-Density Scenario: Z1=1.15 p/m² (YOLOv8), Z2=5.82 p/m² (CSRNet), Z3=3.35 p/m² (Farnebäck Conflict). GIS dynamically rerouted egress corridors."
+    )
+    await broadcast_state()
+
+    return {
+        "ok": True,
+        "message": "3-Zone Multi-Density & Multi-API Scenario successfully loaded into GIS engine.",
+        "zones": scenario_zones,
+        "active_hazards": state["active_hazards"],
+        "blocked_edges": state["blocked_edges"],
+        "gis_routing": routing,
+        "broadcasts": hazard_res.get("broadcasts", []),
+        "heatmap_preview": b64_kumbh
+    }
 
 
 # ============================================================================
