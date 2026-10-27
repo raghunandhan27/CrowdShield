@@ -221,6 +221,9 @@ export default function App() {
     method: 'Adaptive Regime Switching with Density Hysteresis'
   });
   const [isCrushRegime, setIsCrushRegime] = useState(false);
+  const [kumbhAnalysis, setKumbhAnalysis] = useState(null);
+  const [isAnalyzingKumbh, setIsAnalyzingKumbh] = useState(false);
+  const [showKumbhModal, setShowKumbhModal] = useState(false);
 
   // Medical Dispatch Desk State (Requirement #4)
   const [activeMedicalIncident, setActiveMedicalIncident] = useState(null);
@@ -705,6 +708,23 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to switch vision tier:', err);
+    }
+  };
+
+  const handleRunKumbhAnalysis = async (updateState = false) => {
+    setIsAnalyzingKumbh(true);
+    try {
+      const res = await fetch(`http://localhost:8000/api/vision/analyze_kumbh?update_state=${updateState}`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setKumbhAnalysis(data);
+      }
+    } catch (err) {
+      console.error('Failed to run Maha Kumbh Analysis:', err);
+    } finally {
+      setIsAnalyzingKumbh(false);
     }
   };
 
@@ -1306,6 +1326,172 @@ export default function App() {
             
 
             
+            {/* OFFLINE AI VISION SUITE: 4-TIER ARCHITECTURE & MAHA KUMBH DENSITY REGRESSION */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 space-y-3 font-mono text-xs">
+              {/* Header with Offline Edge Badge */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded bg-emerald-950/60 border border-emerald-600/40 text-emerald-400">
+                    <Cpu className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-xs tracking-wide">
+                        OFFLINE EDGE VISION SUITE (MAHA KUMBH DENSE-CROWD PIPELINE)
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950 border border-emerald-500/40 text-emerald-400 uppercase">
+                        100% OFFLINE LOCAL API
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-zinc-400 font-sans">
+                      Zero cloud reliance • Bypasses cellular blackouts • Auto-switches to CSRNet Density Regression &gt;2.0 pax/m²
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleRunKumbhAnalysis(false)}
+                    disabled={isAnalyzingKumbh}
+                    className="px-2.5 py-1.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 text-[11px] font-bold inline-flex items-center gap-1.5 transition disabled:opacity-50"
+                    title="Run offline CSRNet continuous density regression on current frame / festival dataset"
+                  >
+                    <Flame className="w-3.5 h-3.5" />
+                    <span>{isAnalyzingKumbh ? 'ANALYZING...' : 'RUN MAHA KUMBH DIAGNOSTIC'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleRunKumbhAnalysis(true)}
+                    disabled={isAnalyzingKumbh}
+                    className="px-2.5 py-1.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-[11px] font-bold inline-flex items-center gap-1.5 transition disabled:opacity-50"
+                    title="Run CSRNet density-map and write true densities to GIS map for dynamic NetworkX rerouting"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzingKumbh ? 'animate-spin' : ''}`} />
+                    <span>INGEST & OVERWRITE GIS</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4-Tier Pipeline Model Architecture Selector */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  {
+                    key: 'tier1_yolo_highres',
+                    name: 'Tier 1: High-Res YOLOv8',
+                    sub: '<2.0 pax/m² (Sparse)',
+                    method: 'Bounding Boxes + Homography'
+                  },
+                  {
+                    key: 'tier2_head_yolo',
+                    name: 'Tier 2: Head-Detection YOLO',
+                    sub: '2.0 - 3.0 pax/m² (Occluded)',
+                    method: 'CrowdHuman Head Priors'
+                  },
+                  {
+                    key: 'tier3_density_map',
+                    name: 'Tier 3: CSRNet Density-Map',
+                    sub: '3.0 - 8.0+ pax/m² (Crush)',
+                    method: 'Continuous ∬ D(x,y) dA'
+                  },
+                  {
+                    key: 'tier4_hybrid_auto',
+                    name: 'Tier 4: Hybrid Pro (Auto)',
+                    sub: 'Full Range (Hysteresis)',
+                    method: 'Adaptive Regime Switcher'
+                  }
+                ].map((tier) => {
+                  const isActive = activeVisionTier === tier.key;
+                  return (
+                    <button
+                      key={tier.key}
+                      onClick={() => handleSwitchVisionTier(tier.key)}
+                      className={`p-2 rounded text-left border transition relative flex flex-col justify-between ${
+                        isActive
+                          ? 'bg-emerald-950/40 border-emerald-500/80 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                          : 'bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 text-zinc-400'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-zinc-300'}`}>
+                          {tier.name}
+                        </span>
+                        {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                      </div>
+                      <div className="text-[9px] text-zinc-400 mt-0.5">{tier.sub}</div>
+                      <div className="text-[8px] text-zinc-500 font-mono mt-1 border-t border-zinc-800/80 pt-1">
+                        {tier.method}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Active Kumbh Diagnostic Output Banner (if triggered) */}
+              {kumbhAnalysis && (
+                <div className="p-2.5 rounded bg-black border border-amber-500/40 text-[11px] space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900 pb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                      <span className="text-amber-400 font-bold uppercase">
+                        MAHA KUMBH DENSITY-MAP TELEMETRY INGESTED
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-zinc-900 border border-zinc-700 text-zinc-300">
+                        {kumbhAnalysis.architecture || 'CSRNet Dilated-CNN'}
+                      </span>
+                    </div>
+                    <div className="text-zinc-400 text-[10px]">
+                      Regime:{' '}
+                      <span className={`font-bold ${kumbhAnalysis.is_crush_regime ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {kumbhAnalysis.regime}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    {/* Left: Key Metrics */}
+                    <div className="md:col-span-8 grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800">
+                        <span className="text-[9px] text-zinc-500 block">TOTAL ESTIMATED</span>
+                        <span className="text-sm font-bold text-white">{kumbhAnalysis.total_count} PAX</span>
+                      </div>
+                      <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800">
+                        <span className="text-[9px] text-zinc-500 block">ZONE 1 (PLAZA)</span>
+                        <span className="text-xs font-bold text-amber-400">{kumbhAnalysis.zone_densities?.z1 ?? 0} p/m²</span>
+                      </div>
+                      <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800">
+                        <span className="text-[9px] text-zinc-500 block">ZONE 2 (CHOKE)</span>
+                        <span className="text-xs font-bold text-amber-400">{kumbhAnalysis.zone_densities?.z2 ?? 0} p/m²</span>
+                      </div>
+                      <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800">
+                        <span className="text-[9px] text-zinc-500 block">ZONE 3 (ARENA)</span>
+                        <span className="text-xs font-bold text-amber-400">{kumbhAnalysis.zone_densities?.z3 ?? 0} p/m²</span>
+                      </div>
+                      <div className="p-1.5 rounded bg-zinc-900 border border-zinc-800">
+                        <span className="text-[9px] text-zinc-500 block">ZONE 4 (EXIT)</span>
+                        <span className="text-xs font-bold text-amber-400">{kumbhAnalysis.zone_densities?.z4 ?? 0} p/m²</span>
+                      </div>
+                    </div>
+
+                    {/* Right: Thermal Heatmap Thumbnail */}
+                    {kumbhAnalysis.heatmap_preview && (
+                      <div className="md:col-span-4 flex items-center gap-2 p-1.5 rounded bg-zinc-900 border border-zinc-800">
+                        <img
+                          src={kumbhAnalysis.heatmap_preview}
+                          alt="JET Thermal Density Heatmap"
+                          className="w-20 h-12 object-cover rounded border border-zinc-700"
+                        />
+                        <div className="text-[9px] text-zinc-400 space-y-0.5">
+                          <span className="text-white font-bold block">JET Colormap Surface</span>
+                          <span>Integral: Count = ∬ D(x,y) dA</span>
+                          <span className="text-emerald-400 block">Zero Cloud Latency</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* VIEW MODE: SPLIT DUAL VIEW */}
             {opsView === 'split' && (
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
