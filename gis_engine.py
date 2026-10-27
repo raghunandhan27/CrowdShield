@@ -853,6 +853,7 @@ class GISVenueManager:
         for z in self.zones["features"]:
             f = json.loads(json.dumps(z))
             zid = f["properties"]["id"]
+            f["properties"]["type"] = "ZONE"
             if zone_metrics and zid in zone_metrics:
                 zm = zone_metrics[zid]
                 f["properties"]["density"] = zm.get("density", 0.0)
@@ -862,6 +863,11 @@ class GISVenueManager:
                 # Map color to risk level
                 colors = {0: "#10b981", 1: "#eab308", 2: "#f97316", 3: "#ef4444"}
                 f["properties"]["color_current"] = colors.get(zm.get("level", 0), "#10b981")
+                # AI Model sync
+                d_val = zm.get("density", 0.0)
+                f["properties"]["ai_model_name"] = zm.get("ai_model_name") or ("SAHI+YOLO" if d_val >= 5.0 else ("CSRNet" if d_val >= 3.2 else ("DM-Count" if d_val >= 1.8 else "P2PNet")))
+            else:
+                f["properties"]["ai_model_name"] = "P2PNet"
 
             # Check if this zone is under active hazard isolation
             if hasattr(self, 'isolated_zones') and zid in self.isolated_zones:
@@ -876,7 +882,9 @@ class GISVenueManager:
 
         # Corridors
         for c in self.corridors["features"]:
-            features.append(json.loads(json.dumps(c)))
+            cf = json.loads(json.dumps(c))
+            cf["properties"]["type"] = "CORRIDOR"
+            features.append(cf)
 
         # Gates & Responder Points
         for g in self.gates["features"]:
