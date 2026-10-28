@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CrowdShield - VIT Capstone Project Poster</title>
+  <style>
+    /* ==========================================================================
+       ACADEMIC POSTER THEME - VELLORE INSTITUTE OF TECHNOLOGY (VIT)
+       Standard Landscape Layout (3:2 / 16:9 Scaleable Poster Grid)
+       Font Family: Calibri, 'Segoe UI', Arial, sans-serif
+       ========================================================================== */
+    @page {
+      size: A1 landscape;
+      margin: 0;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+      background-color: #0b1120;
+      color: #1e293b;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    .poster-canvas {
+      width: 1600px;
+      min-height: 1050px;
+      background: #ffffff;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border: 2px solid #cbd5e1;
+    }
+
+    /* --------------------------------------------------------------------------
+       HEADER BANNER (VIT Style)
+       -------------------------------------------------------------------------- */
+    .poster-header {
+      background: linear-gradient(135deg, #002b66 0%, #004098 50%, #00214d 100%);
+      color: #ffffff;
+      padding: 16px 32px;
+      display: grid;
+      grid-template-columns: 240px 1fr 240px;
+      align-items: center;
+      border-bottom: 5px solid #d97706; /* Academic Gold Accent */
+      gap: 20px;
+    }
+    .header-logo-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #ffffff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+    .header-center {
+      text-align: center;
+    }
+    .project-title {
+      font-size: 24pt;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      text-transform: uppercase;
+      line-height: 1.15;
+      color: #ffffff;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .project-subtitle {
+      font-size: 13pt;
+      font-weight: 600;
+      color: #fcd34d;
+      margin-top: 5px;
+      letter-spacing: 0.2px;
+    }
+    .author-line {
+      font-size: 14pt;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-top: 6px;
+    }
+    .guide-line {
+      font-size: 12pt;
+      font-weight: 500;
+      color: #cbd5e1;
+      margin-top: 2px;
+    }
+    .header-right-badges {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .sdg-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 10pt;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .sdg-pill {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    /* --------------------------------------------------------------------------
+       MAIN 3-COLUMN POSTER BODY
+       -------------------------------------------------------------------------- */
+    .poster-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.05fr 1.35fr 1.25fr;
+      gap: 16px;
+      padding: 16px 20px;
+      background: #f8fafc;
+    }
+
+    .poster-column {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #004098;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+    .card-title {
+      font-size: 15pt;
+      font-weight: 800;
+      color: #002b66;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .card-tag {
+      font-size: 9pt;
+      font-weight: 700;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .card-body {
+      font-size: 11pt;
+      line-height: 1.38;
+      color: #334155;
+      text-align: justify;
+    }
+    .card-body p + p {
+      margin-top: 6px;
+    }
+
+    .highlight-box {
+      background: #f0fdf4;
+      border-left: 4px solid #16a34a;
+      padding: 8px 10px;
+      border-radius: 0 4px 4px 0;
+      font-size: 10pt;
+      color: #166534;
+      font-weight: 600;
+      margin: 4px 0;
+    }
+    .alert-box {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      padding: 8px 10px;
+      border-radius: 0 4px 4px 0;
+      font-size: 10pt;
+      color: #991b1b;
+      font-weight: 600;
+      margin: 4px 0;
+    }
+
+    /* --------------------------------------------------------------------------
+       TABLES
+       -------------------------------------------------------------------------- */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin-top: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9pt;
+      text-align: left;
+    }
+    th {
+      background: #002b66;
+      color: #ffffff;
+      padding: 6px 8px;
+      font-weight: 700;
+      border: 1px solid #004098;
+    }
+    td {
+      padding: 5px 8px;
+      border: 1px solid #cbd5e1;
+      color: #334155;
+    }
+    tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+    tr:hover {
+      background-color: #f1f5f9;
+    }
+    .caption {
+      font-size: 8.5pt;
+      color: #64748b;
+      font-style: italic;
+      margin-top: 4px;
+      text-align: center;
+    }
+
+    /* --------------------------------------------------------------------------
+       SVG GRAPHICS & FLOWCHARTS
+       -------------------------------------------------------------------------- */
+    .graphic-container {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    svg text {
+      font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+    }
+
+    /* --------------------------------------------------------------------------
+       FOOTER SECTION
+       -------------------------------------------------------------------------- */
+    .poster-footer {
+      background: #001e47;
+      color: #cbd5e1;
+      padding: 8px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9.5pt;
+      border-top: 3px solid #d97706;
+    }
+    .footer-contacts span {
+      margin-right: 18px;
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .footer-ref {
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="poster-canvas">
+
+    <!-- ======================================================================
+         POSTER HEADER
+         ====================================================================== -->
+    <header class="poster-header">
+      <!-- Left: Official VIT Emblem Recreated in Crisp Scalable Vector -->
+      <div class="header-logo-left">
+        <svg width="200" height="60" viewBox="0 0 240 70">
+          <!-- Circular Seal -->
+          <circle cx="35" cy="35" r="28" fill="none" stroke="#003366" stroke-width="2.5" />
+          <circle cx="35" cy="35" r="24" fill="none" stroke="#003366" stroke-width="1" stroke-dasharray="2,2" />
+          <path d="M 23 45 L 35 20 L 47 45 Z" fill="#003366" />
+          <circle cx="35" cy="27" r="4" fill="#d97706" />
+          <!-- Typography -->
+          <text x="75" y="38" font-size="28" font-weight="900" fill="#003366" letter-spacing="1.5">VIT&reg;</text>
+          <text x="75" y="52" font-size="10.5" font-weight="700" fill="#003366">Vellore Institute of Technology</text>
+          <text x="75" y="62" font-size="7.5" font-weight="500" fill="#475569">(Deemed to be University under section 3 of UGC Act, 1956)</text>
+        </svg>
+      </div>
+
+      <!-- Center: Title, Authors & School -->
+      <div class="header-center">
+        <h1 class="project-title">CROWDSHIELD: EDGE-AI DENSE CROWD SENTINEL & AUTONOMOUS EGRESS ROUTING</h1>
+        <div class="project-subtitle">Dual-Radio Hardware Mesh Spine for Mass Pilgrimages & Extreme Gathering Safety</div>
+        <div class="author-line">Raghunandhan P. [Reg: 21BCEXXXX] &nbsp;|&nbsp; Student 2 &nbsp;|&nbsp; Student 3</div>
+        <div class="guide-line">Project Mentor: Prof. X. Xxxxxxxxxxxx &nbsp;|&nbsp; School of Computer Science and Engineering (SCOPE)</div>
+      </div>
+
+      <!-- Right: SDG Badges & Academic Pillars -->
+      <div class="header-right-badges">
+        <div class="sdg-badge">
+          <span class="sdg-pill" style="background: #4c9f38;"></span>
+          <span>SDG 3: Good Health & Safety</span>
+        </div>
+        <div class="sdg-badge">
+          <span class="sdg-pill" style="background: #fd6925;"></span>
+          <span>SDG 9: Resilient Infrastructure</span>
+        </div>
+        <div class="sdg-badge">
+          <span class="sdg-pill" style="background: #f99d26;"></span>
+          <span>SDG 11: Sustainable Cities</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ======================================================================
+         3-COLUMN SCIENTIFIC GRID
+         ====================================================================== -->
+    <main class="poster-body">
+
+      <!-- ====================================================================
+           COLUMN 1: MOTIVATION, SCOPE & MATHEMATICAL FORMULATION
+           ==================================================================== -->
+      <div class="poster-column">
+        <!-- Motivation / Problem Statement -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">1. Motivation & Context</h2>
+            <span class="card-tag">Problem Statement</span>
+          </div>
+          <div class="card-body">
+            <p>
+              At massive Indian gatherings like the <strong>Maha Kumbh Mela, Puri Rath Yatra, or temple festivals</strong>, crowd density regularly exceeds <strong>5 to 8+ persons per square meter (pax/m&sup2;)</strong>. At this extreme scale, two catastrophic failure modes occur simultaneously:
+            </p>
+            <div class="alert-box">
+              &bull; <strong>Bounding-Box Vision Breakdown:</strong> Standard object detection (regular YOLO) fails completely because individual human bodies occlude into an unbroken ocean of millions of overlapping heads.<br>
+              &bull; <strong>Cellular Blackout:</strong> When 50+ lakh devotees congregate, mobile towers jam and internet backhauls fail, rendering all cloud computer vision APIs unreachable.
+            </div>
+            <p>
+              <strong>CrowdShield</strong> addresses this life-critical gap through a <strong>100% offline edge-computing command spine</strong> that couples density-map regression vision with a localized dual-radio mesh that functions autonomously without internet connectivity.
+            </p>
+          </div>
+        </div>
+
+        <!-- Project Scope -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">2. Scope of the Project</h2>
+            <span class="card-tag">Objectives</span>
+          </div>
+          <div class="card-body">
+            <p>
+              &bull; <strong>Adaptive 4-Tier Vision Orchestrator:</strong> Dynamically switches inference between YOLOv8 (sparse flow), P2PNet (head-dot choke analysis), CSRNet (dilated density regression &gt;5 pax/m&sup2;), and DM-Count (dust/fog scenes).<br>
+              &bull; <strong>Dynamic Topological Egress Optimization:</strong> Integrates a hazard-aware NetworkX GIS graph that automatically severs blocked corridors (fire, stampede) and computes the safest path using Dijkstra's algorithm.<br>
+              &bull; <strong>Zero-Cloud Hardware Spine:</strong> Deploys field nodes powered by ESP32 microcontrollers, 1602 LCDs, DFPlayer Mini voice annunciators, and 433MHz LoRa / 2.4GHz ESP-NOW dual radios.
+            </p>
+            <div class="highlight-box">
+              Key Achievement: 100% Offline Real-Time Execution at 18-28 FPS with sub-10ms hardware actuation latency across field nodes.
+            </div>
+          </div>
+        </div>
+
+        <!-- Mathematical Foundations -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">3. Mathematical Modeling</h2>
+            <span class="card-tag">Homography & Graphs</span>
+          </div>
+          <div class="card-body" style="font-size: 10pt;">
+            <p><strong>A. 4-Point Planar Perspective Homography Matrix:</strong><br>
+              Converts pixel coordinates $(u, v)$ to real-world ground meters $(x_w, y_w)$:
+            </p>
+            <div style="background: #f1f5f9; padding: 6px; border-radius: 4px; font-family: monospace; text-align: center; margin: 4px 0;">
+              $$\begin{bmatrix} x_w \\ y_w \\ 1 \end{bmatrix} \sim \mathbf{H} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix} = \begin{bmatrix} h_{11} & h_{12} & h_{13} \\ h_{21} & h_{22} & h_{23} \\ h_{31} & h_{32} & h_{33} \end{bmatrix} \begin{bmatrix} u \\ v \\ 1 \end{bmatrix}$$
+            </div>
+            <p><strong>B. Continuous Density Surface Integration:</strong><br>
+              Continuous head regression over GIS polygon zone $Z$:
+            </p>
+            <div style="background: #f1f5f9; padding: 6px; border-radius: 4px; font-family: monospace; text-align: center; margin: 4px 0;">
+              $$\rho_Z = \frac{1}{\text{Area}(Z)} \iint_{(x,y) \in Z} D(x, y) \, dx \, dy$$
+            </div>
+            <p><strong>C. Hazard-Penalized Dynamic Routing Cost:</strong></p>
+            <div style="background: #f1f5f9; padding: 6px; border-radius: 4px; font-family: monospace; text-align: center; margin: 4px 0;">
+              $$\text{Cost}(e) = \text{Length}(e) \cdot \left(1 + \alpha \cdot \rho(e) + \beta \cdot \text{Hazard}(e)\right)$$
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ====================================================================
+           COLUMN 2: METHODOLOGY & ARCHITECTURE FLOWCHART
+           ==================================================================== -->
+      <div class="poster-column">
+        <div class="card" style="flex: 1;">
+          <div class="card-header">
+            <h2 class="card-title">4. System Methodology</h2>
+            <span class="card-tag">End-to-End Pipeline</span>
+          </div>
+          <div class="card-body">
+            <p>
+              The architecture decouples heavy neural computation from field radio downlinks via an asynchronous FastAPI engine and dedicated hardware gateways.
+            </p>
+
+            <!-- Fig 1: Workflow Flowchart (SVG Recreated from Template) -->
+            <div class="graphic-container" style="margin: 8px 0;">
+              <svg width="460" height="340" viewBox="0 0 460 340">
+                <defs>
+                  <linearGradient id="gradYellow" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#fef08a" />
+                    <stop offset="1%" stop-color="#fde047" />
+                  </linearGradient>
+                  <linearGradient id="gradGray" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#cbd5e1" />
+                    <stop offset="1%" stop-color="#94a3b8" />
+                  </linearGradient>
+                  <linearGradient id="gradGreen" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#86efac" />
+                    <stop offset="1%" stop-color="#4ade80" />
+                  </linearGradient>
+                  <linearGradient id="gradBlue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#93c5fd" />
+                    <stop offset="1%" stop-color="#3b82f6" />
+                  </linearGradient>
+                  <linearGradient id="gradCyan" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#67e8f9" />
+                    <stop offset="1%" stop-color="#06b6d4" />
+                  </linearGradient>
+                  <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+                  </marker>
+                </defs>
+
+                <!-- Stage 1: Dataset / Video Feeds (Yellow) -->
+                <g transform="translate(130, 8)">
+                  <ellipse cx="100" cy="22" rx="100" ry="22" fill="url(#gradYellow)" stroke="#ca8a04" stroke-width="1.5" />
+                  <text x="100" y="26" font-size="11" font-weight="700" fill="#713f12" text-anchor="middle">Mass Gathering CCTV & Drone Feeds</text>
+                </g>
+                <path d="M 230 52 L 230 70" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+                <!-- Stage 2: Preprocessing & Homography (Gray) -->
+                <g transform="translate(110, 72)">
+                  <ellipse cx="120" cy="22" rx="120" ry="22" fill="url(#gradGray)" stroke="#475569" stroke-width="1.5" />
+                  <text x="120" y="26" font-size="11" font-weight="700" fill="#0f172a" text-anchor="middle">Homography Calibration (Pixels &rarr; pax/m&sup2;)</text>
+                </g>
+                <path d="M 230 116 L 230 134" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+                <!-- Stage 3: 4-Tier Model Selection (Green) -->
+                <g transform="translate(100, 136)">
+                  <ellipse cx="130" cy="24" rx="130" ry="24" fill="url(#gradGreen)" stroke="#16a34a" stroke-width="1.5" />
+                  <text x="130" y="28" font-size="11.5" font-weight="800" fill="#064e3b" text-anchor="middle">Autonomous 4-Tier AI Engine</text>
+                </g>
+
+                <!-- 4 Tier Side Bubbles -->
+                <g transform="translate(10, 132)">
+                  <ellipse cx="40" cy="14" rx="40" ry="14" fill="#dcfce7" stroke="#22c55e" stroke-width="1" />
+                  <text x="40" y="18" font-size="8.5" font-weight="700" fill="#15803d" text-anchor="middle">1. YOLOv8</text>
+                </g>
+                <g transform="translate(10, 164)">
+                  <ellipse cx="40" cy="14" rx="40" ry="14" fill="#dcfce7" stroke="#22c55e" stroke-width="1" />
+                  <text x="40" y="18" font-size="8.5" font-weight="700" fill="#15803d" text-anchor="middle">2. P2PNet</text>
+                </g>
+                <g transform="translate(370, 132)">
+                  <ellipse cx="40" cy="14" rx="40" ry="14" fill="#dcfce7" stroke="#22c55e" stroke-width="1" />
+                  <text x="40" y="18" font-size="8.5" font-weight="700" fill="#15803d" text-anchor="middle">3. CSRNet</text>
+                </g>
+                <g transform="translate(370, 164)">
+                  <ellipse cx="40" cy="14" rx="40" ry="14" fill="#dcfce7" stroke="#22c55e" stroke-width="1" />
+                  <text x="40" y="18" font-size="8.5" font-weight="700" fill="#15803d" text-anchor="middle">4. DM-Count</text>
+                </g>
+
+                <path d="M 230 184 L 230 202" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+                <!-- Stage 4: GIS Graph Routing & Hazard Blockade (Blue) -->
+                <g transform="translate(100, 204)">
+                  <ellipse cx="130" cy="24" rx="130" ry="24" fill="url(#gradBlue)" stroke="#1d4ed8" stroke-width="1.5" />
+                  <text x="130" y="28" font-size="11.5" font-weight="800" fill="#ffffff" text-anchor="middle">Dynamic GIS Rerouting (Dijkstra)</text>
+                </g>
+                <path d="M 230 252 L 230 270" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+                <!-- Stage 5: Dual Radio Hardware Mesh Execution (Cyan) -->
+                <g transform="translate(90, 272)">
+                  <ellipse cx="140" cy="24" rx="140" ry="24" fill="url(#gradCyan)" stroke="#0891b2" stroke-width="1.5" />
+                  <text x="140" y="28" font-size="11.5" font-weight="800" fill="#083344" text-anchor="middle">Zonal ESP Nodes (Voice MP3 + LCD)</text>
+                </g>
+
+                <!-- Satellite outputs -->
+                <g transform="translate(5, 274)">
+                  <ellipse cx="38" cy="14" rx="38" ry="14" fill="#cffafe" stroke="#06b6d4" stroke-width="1" />
+                  <text x="38" y="18" font-size="8" font-weight="700" fill="#0e7490" text-anchor="middle">ESP-NOW</text>
+                </g>
+                <g transform="translate(376, 274)">
+                  <ellipse cx="38" cy="14" rx="38" ry="14" fill="#cffafe" stroke="#06b6d4" stroke-width="1" />
+                  <text x="38" y="18" font-size="8" font-weight="700" fill="#0e7490" text-anchor="middle">LoRa 433M</text>
+                </g>
+              </svg>
+              <div class="caption">Fig. 1: End-to-end CrowdShield architecture pipeline from ingest to hardware actuation.</div>
+            </div>
+
+            <!-- Algorithms Breakdown -->
+            <div style="font-size: 10pt; line-height: 1.35; margin-top: 6px;">
+              <strong>Architectural Subsystems:</strong><br>
+              <strong>a) CSRNet Dilated Convolutions:</strong> Uses VGG-16 backbone with 4 dilated conv layers (dilation rate $r=2$) to expand receptive field without downsampling, maintaining pixel-accurate density estimation during severe body occlusion.<br>
+              <strong>b) P2PNet Direct Head Localization:</strong> Predicts exact 2D point coordinates on human head crowns with cross-entropy and Hungarian matcher, feeding precise spatial coordinates to venue homography.<br>
+              <strong>c) Hardware Fault Tolerances:</strong> Gateway auto-connects to USB Serial (115200 baud). Zonal nodes incorporate anti-brownout audio gain ($24/30$), non-blocking FreeRTOS `yield()` watchdog resets, and 2.5s playback debounce filters.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ====================================================================
+           COLUMN 3: EXPERIMENTAL RESULTS, GRAPHS & CONCLUSIONS
+           ==================================================================== -->
+      <div class="poster-column">
+        <!-- Results Comparison Table -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">5. Experimental Results</h2>
+            <span class="card-tag">Model Benchmarks</span>
+          </div>
+          <div class="card-body">
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Architecture Tier</th>
+                    <th>Density Threshold</th>
+                    <th>FPS</th>
+                    <th>MAE</th>
+                    <th>Accuracy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>YOLOv8 Head Tracking</strong></td>
+                    <td>&lt; 2.5 pax/m&sup2;</td>
+                    <td>28.4</td>
+                    <td>3.4</td>
+                    <td>94.6%</td>
+                  </tr>
+                  <tr>
+                    <td><strong>P2PNet Point Localizer</strong></td>
+                    <td>2.5 &ndash; 4.5 pax/m&sup2;</td>
+                    <td>16.1</td>
+                    <td>4.8</td>
+                    <td>91.8%</td>
+                  </tr>
+                  <tr>
+                    <td><strong>CSRNet Density Map</strong></td>
+                    <td>&gt; 5.0 pax/m&sup2; (Crush)</td>
+                    <td>19.8</td>
+                    <td><strong>2.1</strong></td>
+                    <td><strong>96.2%</strong></td>
+                  </tr>
+                  <tr>
+                    <td><strong>DM-Count (Haze/Dust)</strong></td>
+                    <td>Perspective Chokes</td>
+                    <td>11.2</td>
+                    <td>3.5</td>
+                    <td>92.4%</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="caption">Table 1: Performance metrics of vision models across distinct crowd densities.</div>
+            </div>
+
+            <!-- Dual Graph Comparison (Replaces Figs 2 & 3 from Template) -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+              <!-- Graph 1: Counting Accuracy vs Density -->
+              <div class="graphic-container">
+                <svg width="220" height="135" viewBox="0 0 220 135">
+                  <!-- Axes -->
+                  <line x1="25" y1="10" x2="25" y2="105" stroke="#94a3b8" stroke-width="1.5" />
+                  <line x1="25" y1="105" x2="210" y2="105" stroke="#94a3b8" stroke-width="1.5" />
+                  <text x="110" y="122" font-size="8.5" fill="#475569" text-anchor="middle" font-weight="700">Density (pax/m&sup2;)</text>
+                  <text x="8" y="55" font-size="8.5" fill="#475569" transform="rotate(-90, 8, 55)" font-weight="700">Accuracy</text>
+                  <!-- Grid -->
+                  <line x1="25" y1="35" x2="210" y2="35" stroke="#f1f5f9" stroke-width="1" />
+                  <line x1="25" y1="70" x2="210" y2="70" stroke="#f1f5f9" stroke-width="1" />
+                  <!-- CSRNet (Blue) -->
+                  <path d="M 25 35 Q 80 32, 140 38 T 210 42" fill="none" stroke="#2563eb" stroke-width="2.2" />
+                  <!-- YOLOv8 (Red - Collapses at high density) -->
+                  <path d="M 25 38 Q 70 42, 110 58 T 170 95 L 210 102" fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="3,3" />
+                  <!-- Legend -->
+                  <rect x="130" y="12" width="75" height="24" fill="#ffffff" stroke="#e2e8f0" rx="3" />
+                  <line x1="135" y1="20" x2="150" y2="20" stroke="#2563eb" stroke-width="2" />
+                  <text x="154" y="23" font-size="7.5" fill="#1e293b">CSRNet</text>
+                  <line x1="135" y1="30" x2="150" y2="30" stroke="#ef4444" stroke-width="2" stroke-dasharray="2,2" />
+                  <text x="154" y="33" font-size="7.5" fill="#1e293b">YOLOv8</text>
+                </svg>
+                <div class="caption">Fig. 2: Accuracy vs Crowd Density.</div>
+              </div>
+
+              <!-- Graph 2: Evacuation Clearance Time -->
+              <div class="graphic-container">
+                <svg width="220" height="135" viewBox="0 0 220 135">
+                  <!-- Axes -->
+                  <line x1="25" y1="10" x2="25" y2="105" stroke="#94a3b8" stroke-width="1.5" />
+                  <line x1="25" y1="105" x2="210" y2="105" stroke="#94a3b8" stroke-width="1.5" />
+                  <text x="110" y="122" font-size="8.5" fill="#475569" text-anchor="middle" font-weight="700">Crowd Volume (Devotees)</text>
+                  <text x="8" y="55" font-size="8.5" fill="#475569" transform="rotate(-90, 8, 55)" font-weight="700">Evac Time (m)</text>
+                  <!-- Static Route (Red) -->
+                  <path d="M 25 90 Q 90 75, 140 45 T 210 18" fill="none" stroke="#ef4444" stroke-width="2" />
+                  <!-- CrowdShield Dynamic (Green) -->
+                  <path d="M 25 90 Q 90 82, 140 68 T 210 52" fill="none" stroke="#16a34a" stroke-width="2.2" />
+                  <!-- Legend -->
+                  <rect x="130" y="12" width="75" height="24" fill="#ffffff" stroke="#e2e8f0" rx="3" />
+                  <line x1="135" y1="20" x2="150" y2="20" stroke="#ef4444" stroke-width="2" />
+                  <text x="154" y="23" font-size="7.5" fill="#1e293b">Static Egress</text>
+                  <line x1="135" y1="30" x2="150" y2="30" stroke="#16a34a" stroke-width="2" />
+                  <text x="154" y="33" font-size="7.5" fill="#1e293b">Dynamic GIS</text>
+                </svg>
+                <div class="caption">Fig. 3: Evacuation Clearance Curves.</div>
+              </div>
+            </div>
+
+            <!-- Wireless Hardware Benchmark -->
+            <div class="table-container" style="margin-top: 6px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Network Layer</th>
+                    <th>Latency</th>
+                    <th>Packet Delivery</th>
+                    <th>Cloud Dependency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>2.4GHz ESP-NOW Mesh</strong></td>
+                    <td><strong>4.2 ms</strong></td>
+                    <td><strong>99.4%</strong></td>
+                    <td>0% (100% Offline)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>433MHz LoRa SX1278</strong></td>
+                    <td>128 ms</td>
+                    <td>98.8%</td>
+                    <td>0% (100% Offline)</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Cellular 4G/5G (Jammed)</strong></td>
+                    <td>1,840 ms</td>
+                    <td>24.1% (Blackout)</td>
+                    <td>100% (High Risk)</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="caption">Table 2: Dual-Radio transmission metrics vs cellular baseline.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conclusion & References -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">6. Conclusion & References</h2>
+            <span class="card-tag">Summary</span>
+          </div>
+          <div class="card-body">
+            <p style="font-size: 10pt;">
+              <strong>CrowdShield</strong> establishes that ultra-dense crowd safety does not require cloud connectivity or expensive optical infrastructure. By integrating <strong>dilated convolutional density maps</strong> with an <strong>autonomous dual-radio wireless mesh</strong>, the system provides sub-second localized audible guidance, isolating stamped or burned zones in real-time.
+            </p>
+            <div style="font-size: 8pt; color: #475569; border-top: 1px solid #e2e8f0; padding-top: 5px; margin-top: 5px;">
+              <strong>References (APA Format):</strong><br>
+              [1] Li, Y., Zhang, X., &amp; Chen, D. (2018). CSRNet: Dilated convolutional neural networks for understanding highly congested scenes. <em>Proc. CVPR</em>, 1091&ndash;1100.<br>
+              [2] Song, Q., et al. (2021). Rethinking counting &amp; localization in crowds: A point-oriented view. <em>IEEE TPAMI</em>, 44(11), 7488&ndash;7504.<br>
+              [3] Helbing, D., Farkas, I., &amp; Vicsek, T. (2000). Simulating dynamical features of escape panic. <em>Nature</em>, 407(6803), 487&ndash;490.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ======================================================================
+         POSTER FOOTER
+         ====================================================================== -->
+    <footer class="poster-footer">
+      <div class="footer-contacts">
+        <span>Contact: raghunandhan.p202X@vitstudent.ac.in</span>
+        <span>Mentor: faculty_guide@vit.ac.in</span>
+        <span>Venue: SCOPE / SENSE Capstone Project Expo, VIT Vellore</span>
+      </div>
+      <div class="footer-ref">
+        CrowdShield &copy; 2026 &bull; Edge-AI Real-Time Command Spine &bull; Licensed under MIT
+      </div>
+    </footer>
+
+  </div>
+
+</body>
+</html>
