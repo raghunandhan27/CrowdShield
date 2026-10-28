@@ -9,9 +9,9 @@
 // PHYSICAL PIN CONNECTIONS (IDENTICAL FOR ALL 3 ZONAL NODES):
 // ----------------------------------------------------------------------------
 // 1. SOS PUSH BUTTON:
-//    - One leg        -> ESP32 GPIO 12
+//    - One leg        -> ESP32 GPIO 13
 //    - Other leg      -> ESP32 GND
-//    (Internal pull-up enabled; pressing button pulls GPIO 12 to LOW)
+//    (Internal pull-up enabled; pressing button pulls GPIO 13 to LOW)
 //
 // 2. STATUS / VISUAL ALARM LED:
 //    - Anode (Long leg)  -> ESP32 GPIO 27 (via 330Ω resistor)
@@ -70,7 +70,7 @@ const char* EVAC_MSG   = "EXIT VIA GATE A ";
 const char* IDLE_MSG   = "EXIT: GATE A (W)";
 
 // Pin Assignments
-#define BUTTON_PIN 12   // SOS Button connected to GPIO 12 and GND
+#define BUTTON_PIN 13   // SOS Button connected to GPIO 13 and GND
 #define LED_PIN    27   // Status & Alarm LED
 #define MIC_PIN    34   // Optional sound/mic analog sensor (ADC1)
 
@@ -97,7 +97,7 @@ bool loraOnline = false;
 int lastRawButtonReading = HIGH;
 int stableButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
-const unsigned long DEBOUNCE_DELAY_MS = 50;
+const unsigned long DEBOUNCE_DELAY_MS = 80;
 
 unsigned long lastSend = 0;
 unsigned long lastDownlinkHeard = 0;
@@ -111,13 +111,29 @@ uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 // Volatile state for audio & display playback triggered from downlink
 volatile int pendingTrackToPlay = 0;
 volatile int pendingAlertLevel = 0;
+volatile bool pendingLcdUpdate = false;
+char pendingLcdLine1[17] = "";
+char pendingLcdLine2[17] = "";
 
-// LCD Helper to print formatted 16-character lines cleanly
+// LCD Helper to print formatted 16-character lines cleanly (Anti-Flicker Text Caching)
+static char lastLcdLine1[17] = "";
+static char lastLcdLine2[17] = "";
+
 void updateLcd(const char* line1, const char* line2) {
   char buf1[17];
   char buf2[17];
-  snprintf(buf1, sizeof(buf1), "%-16s", line1);
-  snprintf(buf2, sizeof(buf2), "%-16s", line2);
+  snprintf(buf1, sizeof(buf1), "%-16s", line1 ? line1 : "");
+  snprintf(buf2, sizeof(buf2), "%-16s", line2 ? line2 : "");
+
+  // Skip hardware write if display content has not changed - eliminates 100% of LCD flickering!
+  if (strncmp(lastLcdLine1, buf1, 16) == 0 && strncmp(lastLcdLine2, buf2, 16) == 0) {
+    return;
+  }
+  strncpy(lastLcdLine1, buf1, 16);
+  lastLcdLine1[16] = '\0';
+  strncpy(lastLcdLine2, buf2, 16);
+  lastLcdLine2[16] = '\0';
+
   lcd.setCursor(0, 0);
   lcd.print(buf1);
   lcd.setCursor(0, 1);
@@ -186,7 +202,10 @@ void processDownlinkCommand(const String& incoming, const char* sourceName) {
         // Display zone-specific instruction and exit arrow on 1602 LCD
         String l1 = textPayload.substring(0, min(16, (int)textPayload.length()));
         String l2 = (textPayload.length() > 16) ? textPayload.substring(16, min(32, (int)textPayload.length())) : "";
-        updateLcd(l1.c_str(), l2.c_str());
+        // Thread-safe LCD buffer (rendered in loop to avoid ISR race)
+        snprintf(pendingLcdLine1, sizeof(pendingLcdLine1), "%-16s", l1.c_str());
+        snprintf(pendingLcdLine2, sizeof(pendingLcdLine2), "%-16s", l2.c_str());
+        pendingLcdUpdate = true;
         currentDisplayedState = (pipeLvl >= 3) ? 2 : ((pipeLvl == 2) ? 3 : 4);
         return;
       }
@@ -291,13 +310,10 @@ void setup() {
   dfSerial.begin(9600, SERIAL_8N1, DF_RX_PIN, DF_TX_PIN);
   delay(150);
 
-  if (myDFPlayer.begin(dfSerial)) {
-    dfPlayerOnline = true;
-    myDFPlayer.volume(28); // Volume range 0-30
-    Serial.println("[DFPlayer] Online & Ready with 3W 4Ω Speaker!");
-  } else {
-    Serial.println("[WARN] DFPlayer not detected or SD card missing! Continuing in radio mode.");
-  }
+  myDFPlayer.begin(dfSerial, false, false);
+  dfPlayerOnline = true;
+  myDFPlayer.volume(24); // Stable volume prevents power dip
+  Serial.println("[DFPlayer] Active & Ready on TX2 Pin 26 (Volume 24)");
 
   // 3. Initialize SX1278 LoRa Radio (433MHz)
   LoRa.setPins(LORA_SS, LORA_RST, LORA_DIO0);
@@ -360,6 +376,12 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
+  // Render thread-safe LCD update from downlink if available
+  if (pendingLcdUpdate) {
+    pendingLcdUpdate = false;
+    updateLcd(pendingLcdLine1, pendingLcdLine2);
+  }
+
   // --------------------------------------------------------------------------
   // 1. CHECK FOR INCOMING LORA DOWNLINK PACKETS
   // --------------------------------------------------------------------------
@@ -383,51 +405,52 @@ void loop() {
     int lvl = pendingAlertLevel;
     pendingTrackToPlay = 0;
 
-    Serial.printf("\n>>> [ACTION] Playing Warning Message Track %d on DFPlayer Mini (Level %d) <<<\n", track, lvl);
+    static unsigned long lastAudioPlayTime = 0;
+    static int lastAudioTrack = 0;
 
-    if (dfPlayerOnline) {
-      myDFPlayer.volume(30); // Max volume during alert
-      myDFPlayer.playMp3Folder(track);
-      delay(25);
+    // Debounce downlink commands to prevent continuous loop lockup and audio restart
+    if (now - lastAudioPlayTime > 3000 || track != lastAudioTrack) {
+      lastAudioPlayTime = now;
+      lastAudioTrack = track;
+      Serial.printf("\n>>> [ACTION] Playing Warning Message Track %d on DFPlayer Mini (Level %d) <<<\n", track, lvl);
+      myDFPlayer.volume(24);
       myDFPlayer.play(track);
-    }
 
-    // Update 1602 LCD Display and Visual LED
-    if (track == 1) {
-      // PRESET 1: EMERGENCY EVACUATION (Targeted to designated exit)
-      updateLcd("! EVACUATE NOW !", EVAC_MSG);
-      currentDisplayedState = 2;
-      for (int i = 0; i < 15; i++) {
-        digitalWrite(LED_PIN, LOW); delay(50);
-        digitalWrite(LED_PIN, HIGH); delay(50);
+      // Update 1602 LCD Display and Visual LED only on fresh command / cooldown
+      if (track == 1) {
+        // PRESET 1: EMERGENCY EVACUATION (Targeted to designated exit)
+        updateLcd("! EVACUATE NOW !", EVAC_MSG);
+        currentDisplayedState = 2;
+        for (int i = 0; i < 8; i++) {
+          digitalWrite(LED_PIN, LOW); delay(40); yield();
+          digitalWrite(LED_PIN, HIGH); delay(40); yield();
+        }
+      } else if (track == 2) {
+        // PRESET 2: CROWD CAUTION / SLOW DOWN
+        updateLcd("! CROWD CAUTION !", "SLOW DOWN - WAIT");
+        currentDisplayedState = 3;
+        for (int i = 0; i < 4; i++) {
+          digitalWrite(LED_PIN, LOW); delay(100); yield();
+          digitalWrite(LED_PIN, HIGH); delay(100); yield();
+        }
+      } else {
+        // PRESET 3: ALL CLEAR / STANDBY
+        char line1[17];
+        snprintf(line1, sizeof(line1), "ZONE %d: ALL CLEAR", ZONE_ID);
+        updateLcd(line1, IDLE_MSG);
+        currentDisplayedState = 4;
+        for (int i = 0; i < 2; i++) {
+          digitalWrite(LED_PIN, LOW); delay(200); yield();
+          digitalWrite(LED_PIN, HIGH); delay(200); yield();
+        }
       }
-    } else if (track == 2) {
-      // PRESET 2: CROWD CAUTION / SLOW DOWN
-      updateLcd("! CROWD CAUTION !", "SLOW DOWN - WAIT");
-      currentDisplayedState = 3;
-      for (int i = 0; i < 4; i++) {
-        digitalWrite(LED_PIN, LOW); delay(150);
-        digitalWrite(LED_PIN, HIGH); delay(150);
-        digitalWrite(LED_PIN, LOW); delay(150);
-        digitalWrite(LED_PIN, HIGH); delay(350);
-      }
-    } else {
-      // PRESET 3: ALL CLEAR / STANDBY
-      char line1[17];
-      snprintf(line1, sizeof(line1), "ZONE %d: ALL CLEAR", ZONE_ID);
-      updateLcd(line1, IDLE_MSG);
-      currentDisplayedState = 4;
-      for (int i = 0; i < 3; i++) {
-        digitalWrite(LED_PIN, LOW); delay(400);
-        digitalWrite(LED_PIN, HIGH); delay(400);
-      }
-    }
 
-    digitalWrite(LED_PIN, HIGH); // Restore solid ON
+      digitalWrite(LED_PIN, HIGH); // Restore solid ON
+    }
   }
 
   // --------------------------------------------------------------------------
-  // 3. PHYSICAL SOS BUTTON DETECTION & DEBOUNCING (GPIO 12)
+  // 3. PHYSICAL SOS BUTTON DETECTION & DEBOUNCING (GPIO 13)
   // --------------------------------------------------------------------------
   int rawReading = digitalRead(BUTTON_PIN);
 

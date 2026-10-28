@@ -75,13 +75,13 @@ void setup() {
   Serial.println("   Frequency : 433.0 MHz | SF: 9 | BW: 125kHz | CR: 4/5 | Power: +10 dBm");
   Serial.println("-------------------------------------------------------");
   Serial.println("Transmitting test beacon every 2 seconds...");
-  Serial.println("Press SOS button (GPIO 12 to GND) anytime for emergency test.\n");
+  Serial.println("Press SOS button (GPIO 13 to GND) anytime for emergency test.\n");
 }
 
 void loop() {
   unsigned long now = millis();
 
-  // 1. Debounced SOS Button Detection (GPIO 12 to GND)
+  // 1. Debounced SOS Button Detection (GPIO 13 to GND)
   int rawBtn = digitalRead(BUTTON_PIN);
   if (rawBtn != lastRawButton) {
     lastDebounceTime = now;

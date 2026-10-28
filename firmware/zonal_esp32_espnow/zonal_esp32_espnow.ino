@@ -115,13 +115,29 @@ uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 // Volatile state for audio & LED playback triggered from downlink callback
 volatile int pendingTrackToPlay = 0;
 volatile int pendingAlertLevel = 0;
+volatile bool pendingLcdUpdate = false;
+char pendingLcdLine1[17] = "";
+char pendingLcdLine2[17] = "";
 
-// LCD Helper function to write clean 16-character padded strings
+// LCD Helper function to write clean 16-character padded strings (Anti-Flicker Text Caching)
+static char lastLcdLine1[17] = "";
+static char lastLcdLine2[17] = "";
+
 void updateLcd(const char* line1, const char* line2) {
   char buf1[17];
   char buf2[17];
-  snprintf(buf1, sizeof(buf1), "%-16s", line1);
-  snprintf(buf2, sizeof(buf2), "%-16s", line2);
+  snprintf(buf1, sizeof(buf1), "%-16s", line1 ? line1 : "");
+  snprintf(buf2, sizeof(buf2), "%-16s", line2 ? line2 : "");
+
+  // Skip hardware write if display content has not changed - eliminates 100% of LCD flickering!
+  if (strncmp(lastLcdLine1, buf1, 16) == 0 && strncmp(lastLcdLine2, buf2, 16) == 0) {
+    return;
+  }
+  strncpy(lastLcdLine1, buf1, 16);
+  lastLcdLine1[16] = '\0';
+  strncpy(lastLcdLine2, buf2, 16);
+  lastLcdLine2[16] = '\0';
+
   lcd.setCursor(0, 0);
   lcd.print(buf1);
   lcd.setCursor(0, 1);
@@ -172,6 +188,33 @@ void transmitPacket(bool isSosActive) {
 void processDownlinkCommand(const String& incoming, const char* sourceName) {
   Serial.printf("[%s RX Downlink] %s\n", sourceName, incoming.c_str());
 
+  // 1. Support pipe-delimited format: "zNum|alertLevel|instructionText"
+  if (incoming.indexOf('|') != -1) {
+    int firstPipe = incoming.indexOf('|');
+    int targetZ = incoming.substring(0, firstPipe).toInt();
+    if (targetZ == ZONE_ID || targetZ == 0) {
+      int secondPipe = incoming.indexOf('|', firstPipe + 1);
+      if (secondPipe != -1) {
+        int pipeLvl = incoming.substring(firstPipe + 1, secondPipe).toInt();
+        String textPayload = incoming.substring(secondPipe + 1);
+        textPayload.trim();
+        lastDownlinkHeard = millis();
+        int pipeTrack = (pipeLvl >= 3) ? 1 : ((pipeLvl == 2) ? 2 : 3);
+        pendingTrackToPlay = pipeTrack;
+        pendingAlertLevel = pipeLvl;
+
+        String l1 = textPayload.substring(0, min(16, (int)textPayload.length()));
+        String l2 = (textPayload.length() > 16) ? textPayload.substring(16, min(32, (int)textPayload.length())) : "";
+        snprintf(pendingLcdLine1, sizeof(pendingLcdLine1), "%-16s", l1.c_str());
+        snprintf(pendingLcdLine2, sizeof(pendingLcdLine2), "%-16s", l2.c_str());
+        pendingLcdUpdate = true;
+        currentDisplayedState = (pipeLvl >= 3) ? 2 : ((pipeLvl == 2) ? 3 : 4);
+        return;
+      }
+    }
+  }
+
+  // 2. Support standard JSON format
   // Check if command is targeted to this zone or broadcast to all (z=0)
   bool isForThisZone = false;
   String myZStr1 = "\"z\":" + String(ZONE_ID);
@@ -336,6 +379,12 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
+  // Render thread-safe LCD update from downlink if available
+  if (pendingLcdUpdate) {
+    pendingLcdUpdate = false;
+    updateLcd(pendingLcdLine1, pendingLcdLine2);
+  }
+
   // --------------------------------------------------------------------------
   // STEP A: CHECK FOR INCOMING LORA DOWNLINK PACKETS
   // --------------------------------------------------------------------------
@@ -416,7 +465,7 @@ void loop() {
   int currentReading = digitalRead(BUTTON_PIN);
 
   // Detect button press transition (HIGH -> LOW) with 50ms software debounce
-  if (currentReading == LOW && lastButtonReading == HIGH && (now - lastDebounceTime > 50)) {
+  if (currentReading == LOW && lastButtonReading == HIGH && (now - lastDebounceTime > 80)) {
     lastDebounceTime = now;
     Serial.printf("\n>>> [BUTTON EVENT] SOS Button PRESSED in Zone %d! Transmitting dual burst! <<<\n", ZONE_ID);
     sosLatchUntil = now + 4000; // Latch SOS active for 4 seconds

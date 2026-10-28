@@ -5,7 +5,7 @@
 //   2. 1602 LCD Display (4-Bit: RS=21, E=22, D4=17, D5=16, D6=4, D7=15)
 //   3. DFPlayer Mini Audio & Speaker (RX=25, TX=26 via 1kΩ)
 //   4. SX1278 LoRa Transceiver (NSS=5, RST=14, DIO0=33, SCK=18, MISO=19, MOSI=23)
-//   5. SOS Push Button (GPIO 12 to GND, Internal PULLUP)
+//   5. SOS Push Button (GPIO 13 to GND, Internal PULLUP)
 // ============================================================================
 
 #include <SPI.h>
@@ -16,7 +16,7 @@
 
 // --- Pin Definitions ---
 #define LED_PIN     27   // Status LED (via 330Ω to GND)
-#define BUTTON_PIN  13   // SOS Button (One leg to GPIO 12, other leg to GND)
+#define BUTTON_PIN  13   // SOS Button (One leg to GPIO 13, other leg to GND)
 
 // DFPlayer Mini on HardwareSerial 2
 #define DF_RX_PIN   25   // ESP32 RX2 connects to DFPlayer TX
@@ -40,11 +40,25 @@ int lastButtonState = HIGH;
 uint32_t packetCount = 0;
 unsigned long lastBeacon = 0;
 
+// 1602 LCD Helper (Anti-Flicker Text Caching)
+static char lastLcdLine1[17] = "";
+static char lastLcdLine2[17] = "";
+
 void updateLcd(const char* line1, const char* line2) {
   char buf1[17];
   char buf2[17];
-  snprintf(buf1, sizeof(buf1), "%-16s", line1);
-  snprintf(buf2, sizeof(buf2), "%-16s", line2);
+  snprintf(buf1, sizeof(buf1), "%-16s", line1 ? line1 : "");
+  snprintf(buf2, sizeof(buf2), "%-16s", line2 ? line2 : "");
+
+  // Skip hardware write if display content has not changed - eliminates 100% of LCD flickering!
+  if (strncmp(lastLcdLine1, buf1, 16) == 0 && strncmp(lastLcdLine2, buf2, 16) == 0) {
+    return;
+  }
+  strncpy(lastLcdLine1, buf1, 16);
+  lastLcdLine1[16] = '\0';
+  strncpy(lastLcdLine2, buf2, 16);
+  lastLcdLine2[16] = '\0';
+
   lcd.setCursor(0, 0);
   lcd.print(buf1);
   lcd.setCursor(0, 1);
@@ -83,9 +97,9 @@ void setup() {
   dfSerial.begin(9600, SERIAL_8N1, DF_RX_PIN, DF_TX_PIN);
   delay(200);
 
-  if (myDFPlayer.begin(dfSerial)) {
+  if (myDFPlayer.begin(dfSerial, false, false)) {
     dfPlayerOnline = true;
-    myDFPlayer.volume(28); // Volume range: 0-30
+    myDFPlayer.volume(24); // Stable volume prevents power dip
     delay(100);
     Serial.println(" -> DFPlayer Mini: DETECTED! Playing Track 1 from SD Card...");
     updateLcd("2. AUDIO: OK!   ", "PLAYING TRACK 1 ");
@@ -123,20 +137,22 @@ void setup() {
 
   // --- 5. TEST BUTTON INSTRUCTIONS ---
   Serial.println("\n[TEST 5/5] Ready for SOS Button Test!");
-  Serial.println(" >>> PRESS THE SOS BUTTON ON GPIO 12 TO TEST! <<<\n");
+  Serial.println(" >>> PRESS THE SOS BUTTON ON GPIO 13 TO TEST! <<<\n");
   updateLcd("SYS READY: TX #0", "PRESS SOS BUTTON");
 }
 
 void loop() {
   unsigned long now = millis();
 
-  // --- 1. CONTINUOUS SOS BUTTON CHECK (GPIO 12) ---
+  // --- 1. CONTINUOUS SOS BUTTON CHECK (GPIO 13) ---
   int buttonReading = digitalRead(BUTTON_PIN);
 
-  // Detect press transition (HIGH -> LOW)
-  if (buttonReading == LOW && lastButtonState == HIGH) {
+  static unsigned long lastBtnTime = 0;
+  // Detect press transition (HIGH -> LOW) with 80ms debounce
+  if (buttonReading == LOW && lastButtonState == HIGH && (now - lastBtnTime > 80)) {
+    lastBtnTime = now;
     Serial.println("\n*******************************************************");
-    Serial.println(">>> [BUTTON EVENT DETECTED!] SOS Pressed on GPIO 12! <<<");
+    Serial.println(">>> [BUTTON EVENT DETECTED!] SOS Pressed on GPIO 13! <<<");
     Serial.println("*******************************************************");
 
     // A. Update LCD Screen
@@ -157,7 +173,7 @@ void loop() {
 
     // D. Send Instant Emergency LoRa Packet
     if (loraOnline) {
-      String sosPkt = "{\"alert\":\"SOS_TRIGGERED\",\"zone\":1,\"btn_pin\":12,\"ts\":" + String(now) + "}";
+      String sosPkt = "{\"alert\":\"SOS_TRIGGERED\",\"zone\":1,\"btn_pin\":13,\"ts\":" + String(now) + "}";
       LoRa.beginPacket();
       LoRa.print(sosPkt);
       LoRa.endPacket();
