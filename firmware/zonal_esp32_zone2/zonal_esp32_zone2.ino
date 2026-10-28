@@ -291,13 +291,10 @@ void setup() {
   dfSerial.begin(9600, SERIAL_8N1, DF_RX_PIN, DF_TX_PIN);
   delay(150);
 
-  if (myDFPlayer.begin(dfSerial)) {
-    dfPlayerOnline = true;
-    myDFPlayer.volume(28); // Volume range 0-30
-    Serial.println("[DFPlayer] Online & Ready with 3W 4Ω Speaker!");
-  } else {
-    Serial.println("[WARN] DFPlayer not detected or SD card missing! Continuing in radio mode.");
-  }
+  myDFPlayer.begin(dfSerial, false, false);
+  dfPlayerOnline = true;
+  myDFPlayer.volume(24); // Stable volume prevents power dip
+  Serial.println("[DFPlayer] Active & Ready on TX2 Pin 26 (Volume 24)");
 
   // 3. Initialize SX1278 LoRa Radio (433MHz)
   LoRa.setPins(LORA_SS, LORA_RST, LORA_DIO0);
@@ -385,10 +382,14 @@ void loop() {
 
     Serial.printf("\n>>> [ACTION] Playing Warning Message Track %d on DFPlayer Mini (Level %d) <<<\n", track, lvl);
 
-    if (dfPlayerOnline) {
-      myDFPlayer.volume(30); // Max volume during alert
-      myDFPlayer.playMp3Folder(track);
-      delay(25);
+    static unsigned long lastAudioPlayTime = 0;
+    static int lastAudioTrack = 0;
+
+    if (now - lastAudioPlayTime > 2500 || track != lastAudioTrack) {
+      lastAudioPlayTime = now;
+      lastAudioTrack = track;
+      Serial.printf("\n>>> [ACTION] Playing Warning Message Track %d on DFPlayer Mini (Level %d) <<<\n", track, lvl);
+      myDFPlayer.volume(24);
       myDFPlayer.play(track);
     }
 
