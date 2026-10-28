@@ -80,7 +80,7 @@ const char* NODE_NAME = "NODE-Z1";
 // 2. PIN DEFINITIONS
 // ============================================================================
 // SOS Button & LED
-#define BUTTON_PIN 12  // Physical SOS Push-Button on GPIO 12 (Active LOW to GND)
+#define BUTTON_PIN 13  // Physical SOS Push-Button on GPIO 13 (Active LOW to GND, Safe from MTDI strapping)
 #define LED_PIN    27  // Status / Visual Alarm LED (via 330Ω to GND)
 #define MIC_PIN    34  // Optional Analog sound / mic sensor (ADC1)
 
@@ -410,12 +410,14 @@ void loop() {
   }
 
   // --------------------------------------------------------------------------
-  // STEP C: INSTANT SOS BUTTON TRIGGER & BURST TRANSMISSION
+  // STEP C: INSTANT SOS BUTTON TRIGGER & BURST TRANSMISSION (GPIO 13 to GND)
   // --------------------------------------------------------------------------
+  static unsigned long lastDebounceTime = 0;
   int currentReading = digitalRead(BUTTON_PIN);
 
-  // Detect button press transition (HIGH -> LOW)
-  if (currentReading == LOW && lastButtonReading == HIGH) {
+  // Detect button press transition (HIGH -> LOW) with 50ms software debounce
+  if (currentReading == LOW && lastButtonReading == HIGH && (now - lastDebounceTime > 50)) {
+    lastDebounceTime = now;
     Serial.printf("\n>>> [BUTTON EVENT] SOS Button PRESSED in Zone %d! Transmitting dual burst! <<<\n", ZONE_ID);
     sosLatchUntil = now + 4000; // Latch SOS active for 4 seconds
 

@@ -87,7 +87,7 @@
 #endif
 
 // Pin Assignments
-#define BUTTON_PIN 12   // SOS Button connected to GPIO 12 and GND
+#define BUTTON_PIN 13   // SOS Button connected to GPIO 12 and GND
 #define LED_PIN    27   // Status & Alarm LED
 #define MIC_PIN    34   // Optional sound/mic analog sensor (ADC1)
 

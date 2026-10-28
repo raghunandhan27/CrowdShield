@@ -16,7 +16,7 @@
 
 // --- Pin Definitions ---
 #define LED_PIN     27   // Status LED (via 330Ω to GND)
-#define BUTTON_PIN  12   // SOS Button (One leg to GPIO 12, other leg to GND)
+#define BUTTON_PIN  13   // SOS Button (One leg to GPIO 12, other leg to GND)
 
 // DFPlayer Mini on HardwareSerial 2
 #define DF_RX_PIN   25   // ESP32 RX2 connects to DFPlayer TX

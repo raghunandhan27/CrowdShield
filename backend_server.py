@@ -766,7 +766,7 @@ def log_operator_action(user: str, action: str, details: str):
 
 def trigger_sos_medical_incident(zone_id: str, node_id: str = "NODE-Z1", details: str = ""):
     """
-    Handles SOS Button press from hardware GPIO 12 / mesh node or software trigger:
+    Handles SOS Button press from hardware GPIO 13 / mesh node or software trigger:
     1. Immediately creates a critical Medical Incident with patient triage status.
     2. Identifies matching live camera covering that zone for automatic UI pop-up.
     3. Computes the fastest First Responder approach route from MED_BAY avoiding blocked corridors.
@@ -813,7 +813,7 @@ def trigger_sos_medical_incident(zone_id: str, node_id: str = "NODE-Z1", details
         "timestamp": now,
         "time_str": time.strftime("%H:%M:%S"),
         "severity": "CRITICAL_MEDICAL_SOS",
-        "details": details or "Physical SOS Button pressed on-site (GPIO 12). Rapid medical response required.",
+        "details": details or "Physical SOS Button pressed on-site (GPIO 13). Rapid medical response required.",
         "eta_sec": dispatch_plan.get("eta_sec", 45),
         "distance_m": dispatch_plan.get("distance_m", 50.0)
     }
@@ -1082,7 +1082,7 @@ def embedded_serial_gateway_worker(loop):
                         if ev.get("sos") == 1:
                             print(f"[SERIAL GATEWAY SOS ALERT] *** CONFIRMED SOS FROM NODE {z_num} (RSSI: {ev.get('rssi')} dBm) ***")
                             trigger_sos_medical_incident(f"z{z_num}", f"NODE-Z{z_num}", f"Hardware SOS Button on ESP32 Node Z{z_num} (RSSI: {ev.get('rssi')} dBm)")
-                            log_operator_action("Hardware_Node", "HARDWARE_SOS_RECEIVED", f"Physical SOS on Node z{z_num} (GPIO 12)")
+                            log_operator_action("Hardware_Node", "HARDWARE_SOS_RECEIVED", f"Physical SOS on Node z{z_num} (GPIO 13)")
                         else:
                             print(f"[SERIAL GATEWAY RX] Node {z_num} Heartbeat: seq={ev.get('seq')} RSSI={ev.get('rssi')} dBm")
 
@@ -1722,7 +1722,7 @@ async def resolve_medical_incident(data: dict = None):
 @app.post("/api/simulate_hardware_sos")
 async def simulate_hardware_sos(data: dict = None):
     """
-    Simulates physical hardware SOS button press on GPIO 12:
+    Simulates physical hardware SOS button press on GPIO 13:
     Instantly triggers dedicated Medical Department alert, fastest route computation,
     and automatic live camera pop-up!
     """
@@ -1735,7 +1735,7 @@ async def simulate_hardware_sos(data: dict = None):
         state["nodes"][node_key]["sos"] = 1
         state["nodes"][node_key]["ts"] = time.time()
 
-    inc = trigger_sos_medical_incident(zid, f"NODE-Z{z_num}", "Physical Hardware SOS Button Pressed (GPIO 12)")
+    inc = trigger_sos_medical_incident(zid, f"NODE-Z{z_num}", "Physical Hardware SOS Button Pressed (GPIO 13)")
     await broadcast_state()
     return {"ok": True, "incident": inc}
 
@@ -2393,7 +2393,7 @@ async def post_node(ev: NodeEvent):
         print(f"[FIRE SENSOR DETECTED] >>> Node {ev.z} reported active flame on GPIO 35! Engaged automatic safest route navigation.")
     elif ev.sos == 1:
         trigger_sos_medical_incident(f"z{ev.z}", f"NODE-Z{ev.z}", f"Physical SOS Button pressed on ESP32 (RSSI: {ev.rssi} dBm, Seq #{ev.seq})")
-        log_operator_action("Hardware_Node", "HARDWARE_SOS_RECEIVED", f"Physical SOS on Node z{ev.z} (GPIO 12)")
+        log_operator_action("Hardware_Node", "HARDWARE_SOS_RECEIVED", f"Physical SOS on Node z{ev.z} (GPIO 13)")
 
     await broadcast_state()
     downlink_cmd = downlink_queue.pop(0) if downlink_queue else None

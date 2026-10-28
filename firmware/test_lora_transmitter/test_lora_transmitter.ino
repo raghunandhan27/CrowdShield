@@ -16,7 +16,7 @@
 #define LORA_DIO0  33
 #define LORA_BAND  433E6 // 433 MHz
 
-#define BUTTON_PIN 12
+#define BUTTON_PIN 13
 #define LED_PIN    27
 #define ONBOARD_LED 2
 
