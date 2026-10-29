@@ -71,7 +71,7 @@ const char* IDLE_MSG   = "EXIT: GATE A (W)";
 
 // Pin Assignments
 // SILENT PRESENTATION MODE: Set to 1 to mute hardware speaker for Judge Presentation
-#define SILENT_PRESENTATION_MODE 1
+#define SILENT_PRESENTATION_MODE 0
 #define BUTTON_PIN 13   // SOS Button connected to GPIO 13 and GND
 #define LED_PIN    27   // Status & Alarm LED
 #define MIC_PIN    34   // Optional sound/mic analog sensor (ADC1)

@@ -17,7 +17,7 @@
 // --- Pin Definitions ---
 #define LED_PIN     27   // Status LED (via 330Ω to GND)
 // SILENT PRESENTATION MODE: Set to 1 to mute hardware speaker for Judge Presentation
-#define SILENT_PRESENTATION_MODE 1
+#define SILENT_PRESENTATION_MODE 0
 #define BUTTON_PIN  13   // SOS Button (One leg to GPIO 13, other leg to GND)
 
 // DFPlayer Mini on HardwareSerial 2
