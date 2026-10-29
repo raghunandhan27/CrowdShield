@@ -19,6 +19,7 @@ import os
 import sys
 import threading
 import time
+import re
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional, Set
@@ -1042,14 +1043,26 @@ def embedded_serial_gateway_worker(loop):
                 line = ser.readline().decode('utf-8', errors='ignore').strip()
                 if line:
                     try:
-                        # Extract JSON substring {...} regardless of prefix/suffix (e.g. [RX Packet], [TX SOS], etc.)
-                        b_start = line.find('{')
-                        b_end = line.rfind('}')
-                        if b_start != -1 and b_end != -1 and b_end > b_start:
-                            json_str = line[b_start:b_end + 1]
-                            ev = json.loads(json_str)
-                        else:
-                            continue
+                        ev = None
+                        # Extract clean JSON block {...} even if corrupted by framing noise
+                        candidates = re.findall(r'\{[^{}]*\}', line)
+                        for cand in reversed(candidates):
+                            try:
+                                parsed = json.loads(cand)
+                                if isinstance(parsed, dict) and ('node' in parsed or 'z' in parsed or 'status' in parsed or 'sos' in parsed):
+                                    ev = parsed
+                                    break
+                            except Exception:
+                                continue
+
+                        if ev is None:
+                            b_start = line.find('{')
+                            b_end = line.rfind('}')
+                            if b_start != -1 and b_end != -1 and b_end > b_start:
+                                json_str = line[b_start:b_end + 1]
+                                ev = json.loads(json_str)
+                            else:
+                                continue
 
                         if not isinstance(ev, dict):
                             continue

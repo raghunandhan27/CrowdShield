@@ -323,10 +323,10 @@ void setup() {
   myDFPlayer.volume(0); // Muted for Judge Presentation
   Serial.println("[DFPlayer] Speaker Muted (SILENT_PRESENTATION_MODE Active for Judges)");
 #else
-  myDFPlayer.volume(24); // Stable volume prevents power dip
+  myDFPlayer.volume(19); // Safe, loud volume (prevents 5V USB brownout & amplifier thermal shutdown)
   delay(50);
-  myDFPlayer.volume(24); // Re-assert volume to ensure GD3200/MH2024 UART sync
-  Serial.println("[DFPlayer] Active & Ready on TX2 Pin 26 (Volume 24)");
+  myDFPlayer.volume(19); // Re-assert volume to ensure GD3200/MH2024 UART sync
+  Serial.println("[DFPlayer] Active & Ready on TX2 Pin 26 (Volume 19)");
 #endif
 
   // 3. Initialize SX1278 LoRa Radio (433MHz)
@@ -422,19 +422,30 @@ void loop() {
     static unsigned long lastAudioPlayTime = 0;
     static int lastAudioTrack = 0;
 
-    // Debounce downlink commands to prevent continuous loop lockup and audio restart
-    if (now - lastAudioPlayTime > 3000 || track != lastAudioTrack) {
+    // Responsive cooldown (1000ms): allows repeat playback while preventing audio overlap
+    if (now - lastAudioPlayTime > 1000 || track != lastAudioTrack) {
       lastAudioPlayTime = now;
       lastAudioTrack = track;
 #if SILENT_PRESENTATION_MODE
       Serial.printf("\n>>> [ACTION] Warning Track %d Triggered (Audio Muted for Judges Presentation) <<<\n", track);
 #else
       Serial.printf("\n>>> [ACTION] Playing Warning Message Track %d on DFPlayer Mini (Level %d) <<<\n", track, lvl);
-      myDFPlayer.volume(24);
+
+      // Drain unread bytes from DFPlayer UART
+      while (dfSerial.available()) {
+        dfSerial.read();
+      }
+
+      // Explicit STOP resets DFPlayer EOF pointer so subsequent plays of the SAME track work 100% reliably!
+      myDFPlayer.stop();
+      delay(50);
+
+      // Volume 19 is loud & clear while preventing 5V USB rail sag and amplifier thermal shutdown
+      myDFPlayer.volume(19);
       delay(30);
+
+      // Start playback fresh from byte 0
       myDFPlayer.play(track);
-      delay(30);
-      myDFPlayer.start(); // Ensure immediate playback start
 #endif
 
       // Update 1602 LCD Display and Visual LED only on fresh command / cooldown
