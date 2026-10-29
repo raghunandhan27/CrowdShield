@@ -1119,12 +1119,13 @@ def embedded_serial_gateway_worker(loop):
                 # 2. Check for pending downlinks to transmit
                 if downlink_queue:
                     with active_serial_lock:
-                        if downlink_queue and active_serial_conn and active_serial_conn.is_open:
+                        while downlink_queue and active_serial_conn and active_serial_conn.is_open:
                             cmd = downlink_queue.pop(0)
                             cmd_bytes = (json.dumps(cmd) + "\n").encode("utf-8")
                             active_serial_conn.write(cmd_bytes)
                             active_serial_conn.flush()
                             print(f"[SERIAL GATEWAY] >>> Dispatched Downlink to Mesh: {cmd}")
+                            time.sleep(0.04)
 
         except (serial.SerialException, PermissionError) as s_err:
             with active_serial_lock:
@@ -2893,45 +2894,6 @@ async def reconnect_serial_port():
     global serial_user_pause
     serial_user_pause = False
     return {"ok": True, "message": "Serial auto-reconnect resumed."}
-
-
-async def dispatch_downlink(cmd: DownlinkCmd):
-    cmd_dict = cmd.model_dump()
-    instr = str(cmd_dict.get("instruction", "")).lower()
-    track = 1
-    if "1" in instr or "0001" in instr or "evacuate" in instr or "inst-01" in instr:
-        track = 1
-    elif "2" in instr or "0002" in instr or "caution" in instr or "slow" in instr or "reroute" in instr or "inst-02" in instr:
-        track = 2
-    elif "3" in instr or "0003" in instr or "clear" in instr or "standby" in instr or "inst-03" in instr:
-        track = 3
-
-    cmd_dict["track"] = track
-    cmd_dict["cmd"] = "PLAY"
-
-    # Immediately transmit directly to physical ESP Gateway if connected!
-    global active_serial_conn
-    sent_direct = False
-    with active_serial_lock:
-        if active_serial_conn and active_serial_conn.is_open:
-            try:
-                active_serial_conn.write((json.dumps(cmd_dict) + "\n").encode("utf-8"))
-                active_serial_conn.flush()
-                print(f"[DIRECT DOWNLINK] Transmitted to ESP on USB Serial: {cmd_dict}")
-                sent_direct = True
-            except Exception as ser_write_err:
-                print(f"[DIRECT DOWNLINK] Serial write failed: {ser_write_err}")
-
-    if not sent_direct:
-        downlink_queue.append(cmd_dict)
-
-    log_operator_action(
-        "Operator_Raghu",
-        "DISPATCH_DOWNLINK",
-        f"Broadcast warning to Zone {cmd.z}: Track {track} (Level {cmd.lvl}, {cmd.instruction})",
-    )
-    await broadcast_state()
-    return {"ok": True, "queued": cmd_dict, "queue_depth": len(downlink_queue)}
 
 
 @app.get("/api/downlink_queue")

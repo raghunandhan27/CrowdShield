@@ -222,8 +222,12 @@ void processDownlinkCommand(const String& incoming, const char* sourceName) {
   String bCastStr2 = "\"z\": 0";
 
   if (incoming.indexOf(myZStr1) != -1 || incoming.indexOf(myZStr2) != -1 ||
+      incoming.indexOf("\"zone\":" + String(ZONE_ID)) != -1 ||
+      incoming.indexOf("\"zone\": " + String(ZONE_ID)) != -1 ||
       incoming.indexOf(bCastStr1) != -1 || incoming.indexOf(bCastStr2) != -1 ||
-      incoming.indexOf("SIREN_ON") != -1) {
+      incoming.indexOf("\"zone\":0") != -1 || incoming.indexOf("\"zone\": 0") != -1 ||
+      incoming.indexOf("\"z\":\"0\"") != -1 || incoming.indexOf("\"z\": \"0\"") != -1 ||
+      incoming.indexOf("ALL") != -1 || incoming.indexOf("SIREN_ON") != -1) {
     isForThisZone = true;
   }
 
@@ -310,15 +314,18 @@ void setup() {
 
   // 2. Initialize DFPlayer Mini Audio on HardwareSerial 2
   dfSerial.begin(9600, SERIAL_8N1, DF_RX_PIN, DF_TX_PIN);
-  delay(150);
+  delay(250);
 
   myDFPlayer.begin(dfSerial, false, false);
   dfPlayerOnline = true;
+  delay(100);
   #if SILENT_PRESENTATION_MODE
   myDFPlayer.volume(0); // Muted for Judge Presentation
   Serial.println("[DFPlayer] Speaker Muted (SILENT_PRESENTATION_MODE Active for Judges)");
 #else
   myDFPlayer.volume(24); // Stable volume prevents power dip
+  delay(50);
+  myDFPlayer.volume(24); // Re-assert volume to ensure GD3200/MH2024 UART sync
   Serial.println("[DFPlayer] Active & Ready on TX2 Pin 26 (Volume 24)");
 #endif
 
@@ -424,7 +431,10 @@ void loop() {
 #else
       Serial.printf("\n>>> [ACTION] Playing Warning Message Track %d on DFPlayer Mini (Level %d) <<<\n", track, lvl);
       myDFPlayer.volume(24);
+      delay(30);
       myDFPlayer.play(track);
+      delay(30);
+      myDFPlayer.start(); // Ensure immediate playback start
 #endif
 
       // Update 1602 LCD Display and Visual LED only on fresh command / cooldown

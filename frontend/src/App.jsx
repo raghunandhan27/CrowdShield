@@ -913,7 +913,7 @@ export default function App() {
     let targetZ = 0;
     if (specificZone !== null && specificZone !== undefined) {
       targetZ = specificZone;
-    } else if (alertZoneNum) {
+    } else if (activeEmergencyAlert) {
       targetZ = alertZoneNum;
     } else {
       targetZ = broadcastTargetZone; // defaults to 0 (ALL ZONES)
@@ -4424,7 +4424,7 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => handleRespondToEmergency(1)}
+                      onClick={() => handleRespondToEmergency(1, broadcastTargetZone)}
                       className="bg-red-950/80 hover:bg-red-900 border border-red-700 text-red-200 p-2.5 rounded-lg text-left transition space-y-1 group cursor-pointer"
                     >
                       <div className="flex justify-between items-center text-[10px] text-red-400 font-bold">
@@ -4443,7 +4443,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleRespondToEmergency(2)}
+                      onClick={() => handleRespondToEmergency(2, broadcastTargetZone)}
                       className="bg-amber-950/80 hover:bg-amber-900 border border-amber-700 text-amber-200 p-2.5 rounded-lg text-left transition space-y-1 group cursor-pointer"
                     >
                       <div className="flex justify-between items-center text-[10px] text-amber-400 font-bold">
@@ -4462,7 +4462,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleRespondToEmergency(3)}
+                      onClick={() => handleRespondToEmergency(3, broadcastTargetZone)}
                       className="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 p-2.5 rounded-lg text-left transition space-y-1 group cursor-pointer"
                     >
                       <div className="flex justify-between items-center text-[10px] text-emerald-400 font-bold">
