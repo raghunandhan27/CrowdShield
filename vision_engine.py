@@ -650,7 +650,7 @@ class MultiTierVisionManager:
 
         # Execute YOLO detection
         try:
-            results = yolo(frame_bgr, imgsz=imgsz, classes=[0], verbose=False)[0]
+            results = yolo(frame_bgr, imgsz=imgsz, classes=[0], conf=0.18, verbose=False)[0]
             boxes = results.boxes.xyxy.cpu().numpy() if (results.boxes is not None and len(results.boxes)) else np.empty((0, 4))
         except Exception:
             boxes = np.empty((0, 4))
@@ -712,13 +712,18 @@ class MultiTierVisionManager:
         is_crush = self._cam_is_crush.get(cam_id, False)
         sw_ts = self._cam_switch_ts.get(cam_id, 0.0)
 
+        # Check for High-Density Crowd Texture (thousands of packed heads where YOLO collapses)
+        small_gray = cv2.cvtColor(cv2.resize(frame_bgr, (320, 240)), cv2.COLOR_BGR2GRAY)
+        texture_var = float(cv2.Laplacian(small_gray, cv2.CV_64F).var())
+        is_dense_crowd_texture = (texture_var > 600.0)
+
         # Tier 4: Hybrid Auto-Switcher Regime Logic per camera
         if effective_tier == VisionTier.TIER_4_HYBRID_AUTO:
-            if not is_crush and curr_ema >= 5.0:
+            if not is_crush and (curr_ema >= 5.0 or (is_dense_crowd_texture and valid_yolo_count < 15)):
                 is_crush = True
                 sw_ts = time.time()
-                print(f"[VisionEngine] HYBRID AUTO ({cam_id}): Density {curr_ema:.2f} >= 5.0 pax/m² -> Switching to TIER 3 (CSRNet Density-Map)!")
-            elif is_crush and curr_ema < 4.2 and (time.time() - sw_ts > 3.0):
+                print(f"[VisionEngine] HYBRID AUTO ({cam_id}): High crowd density / texture detected (var={texture_var:.1f}) -> Auto-Activating TIER 3 (CSRNet Density-Map)!")
+            elif is_crush and curr_ema < 4.2 and not is_dense_crowd_texture and (time.time() - sw_ts > 3.0):
                 is_crush = False
                 sw_ts = time.time()
                 print(f"[VisionEngine] HYBRID AUTO ({cam_id}): Density cleared {curr_ema:.2f} < 4.2 pax/m² -> Returning to TIER 1 (YOLO Tracking)!")
@@ -740,9 +745,32 @@ class MultiTierVisionManager:
                 base_yolo_count=valid_yolo_count
             )
             final_count = int(round(csr_count))
+            # Calculate true CSRNet density per m²
+            csr_density = float(final_count) / max(gis_area_m2, 1.0)
+            curr_ema = 0.70 * curr_ema + 0.30 * csr_density
+            self._cam_ema_density[cam_id] = curr_ema
             final_density = round(float(curr_ema), 2)
             regime = "CRUSH_REGIME_DENSITY_MAP"
             engine_name = "CSRNet Dilated-CNN (Density Integration)"
+
+            # If YOLO detected 0 or very few boxes, extract peak head locations from density map
+            # so the video stream renders tactical head-dots over the crowd!
+            if len(boxes) < 5 and density_map is not None:
+                dmap_norm = cv2.normalize(density_map, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                dmap_thresh = cv2.threshold(dmap_norm, 105, 255, cv2.THRESH_BINARY)[1]
+                peak_cnts, _ = cv2.findContours(dmap_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                peak_boxes = []
+                for pc in peak_cnts[:250]:
+                    (px, py), pr = cv2.minEnclosingCircle(pc)
+                    pr = max(6.0, pr)
+                    peak_boxes.append([
+                        max(0.0, float(px - pr)),
+                        max(0.0, float(py - pr)),
+                        min(float(w - 1), float(px + pr)),
+                        min(float(h - 1), float(py + pr))
+                    ])
+                if len(peak_boxes) > 0:
+                    boxes = np.array(peak_boxes, dtype=np.float32)
         else:
             density_map = None
             heatmap_bgr = None
