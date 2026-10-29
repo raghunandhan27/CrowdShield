@@ -101,51 +101,6 @@ const INITIAL_NODES = [
     rssi: -50,
     sos: 0,
     lastSeen: 'Ready on USB'
-  },
-  {
-    id: 'NODE-Z1',
-    zNum: 1,
-    name: 'Zone 1 Field Node',
-    role: 'FIELD_NODE',
-    zoneId: 'ZONE-A',
-    location: 'Zone 1 (Main Gate Plaza)',
-    protocol: 'ESP-NOW 2.4GHz Direct Mesh',
-    status: 'OFFLINE',
-    batteryVolts: 4.12,
-    batteryPct: 90,
-    rssi: -65,
-    sos: 0,
-    lastSeen: 'Awaiting Telemetry'
-  },
-  {
-    id: 'NODE-Z2',
-    zNum: 2,
-    name: 'Zone 2 Field Node',
-    role: 'FIELD_NODE',
-    zoneId: 'ZONE-B',
-    location: 'Zone 2 (East Corridor Choke)',
-    protocol: 'ESP-NOW 2.4GHz Direct Mesh',
-    status: 'OFFLINE',
-    batteryVolts: 4.08,
-    batteryPct: 88,
-    rssi: -70,
-    sos: 0,
-    lastSeen: 'Awaiting Telemetry'
-  },
-  {
-    id: 'NODE-Z3',
-    zNum: 3,
-    name: 'Zone 3 Field Node',
-    role: 'FIELD_NODE',
-    zoneId: 'ZONE-C',
-    location: 'Zone 3 (Central Stage Arena)',
-    protocol: 'ESP-NOW 2.4GHz Direct Mesh',
-    status: 'OFFLINE',
-    batteryVolts: 4.05,
-    batteryPct: 85,
-    rssi: -75,
-    sos: 0,
-    lastSeen: 'Awaiting Telemetry'
   }
 ];
 
@@ -368,48 +323,48 @@ function EmergencyHazardPanel({
         </div>
       )}
 
-      {/* Public Digital Signboards & Ground Staff Radio Scripts */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 uppercase">
-          <span>Public Digital Signboards &amp; Ground Staff Radio Scripts:</span>
-          <span className="text-zinc-500 text-[9px]">Synchronized Wayfinding Matrix</span>
+      {/* Public Digital Signboards & Ground Staff Radio Scripts - Active during incident isolation */}
+      {isHazardActive && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 uppercase">
+            <span>Public Digital Signboards &amp; Ground Staff Radio Scripts:</span>
+            <span className="text-zinc-500 text-[9px]">Synchronized Wayfinding Matrix</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {displayNodes.map((n) => (
+              <div
+                key={n.zone_id}
+                className={`rounded-lg p-2.5 font-mono text-[10px] space-y-1.5 transition border ${
+                  n.isCompromised
+                    ? 'bg-zinc-950 border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
+                    : 'bg-zinc-950 border-cyan-500/80 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
+                  <span className="text-cyan-400 font-bold">SIGNBOARD {n.z_num} [{n.zone_id.toUpperCase()}]</span>
+                  <span className={`text-[8.5px] px-1 py-0.2 rounded ${n.isCompromised ? 'bg-red-900 text-white' : 'bg-zinc-900 text-zinc-400'}`}>
+                    {n.isCompromised ? '🔥 DANGER' : 'ACTIVE'}
+                  </span>
+                </div>
+                <div className="bg-black border border-zinc-900 rounded p-1.5 space-y-0.5 text-center">
+                  <div className={`font-bold text-[10.5px] truncate ${n.isCompromised ? 'text-red-400 animate-pulse' : 'text-amber-400'}`}>
+                    {n.header}
+                  </div>
+                  <div className={`font-bold text-[10px] truncate ${n.isCompromised ? 'text-red-300' : 'text-emerald-400'}`}>
+                    {n.route}
+                  </div>
+                  <div className="text-[9px] text-zinc-400 flex items-center justify-center gap-1 pt-0.5 border-t border-zinc-900">
+                    <span className="text-emerald-400 font-bold">{n.arrow}</span>
+                  </div>
+                </div>
+                <div className="text-[8.5px] text-zinc-400 italic truncate" title={n.staffScript}>
+                  {n.staffScript}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-          {displayNodes.map((n) => (
-            <div
-              key={n.zone_id}
-              className={`rounded-lg p-2.5 font-mono text-[10px] space-y-1.5 transition border ${
-                n.isCompromised
-                  ? 'bg-zinc-950 border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
-                  : isHazardActive
-                  ? 'bg-zinc-950 border-cyan-500/80 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
-                  : 'bg-zinc-950 border-zinc-800'
-              }`}
-            >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
-                <span className="text-cyan-400 font-bold">SIGNBOARD {n.z_num} [{n.zone_id.toUpperCase()}]</span>
-                <span className={`text-[8.5px] px-1 py-0.2 rounded ${n.isCompromised ? 'bg-red-900 text-white' : 'bg-zinc-900 text-zinc-400'}`}>
-                  {n.isCompromised ? '🔥 DANGER' : 'ACTIVE'}
-                </span>
-              </div>
-              <div className="bg-black border border-zinc-900 rounded p-1.5 space-y-0.5 text-center">
-                <div className={`font-bold text-[10.5px] truncate ${n.isCompromised ? 'text-red-400 animate-pulse' : 'text-amber-400'}`}>
-                  {n.header}
-                </div>
-                <div className={`font-bold text-[10px] truncate ${n.isCompromised ? 'text-red-300' : 'text-emerald-400'}`}>
-                  {n.route}
-                </div>
-                <div className="text-[9px] text-zinc-400 flex items-center justify-center gap-1 pt-0.5 border-t border-zinc-900">
-                  <span className="text-emerald-400 font-bold">{n.arrow}</span>
-                </div>
-              </div>
-              <div className="text-[8.5px] text-zinc-400 italic truncate" title={n.staffScript}>
-                {n.staffScript}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Manual Ground Staff / CCTV Incident Intake Form */}
       <div className="pt-2 border-t border-zinc-900 grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
@@ -1146,23 +1101,24 @@ export default function App() {
               );
             }
 
-            // Sync Nodes
+            // Sync Nodes (Dynamic registration - Real hardware only, zero dummy placeholders)
             if (data.nodes) {
-              setNodes((prev) =>
-                prev.map((n) => {
-                  const bn = data.nodes[String(n.zNum)];
-                  if (!bn) return n;
-                  return {
-                    ...n,
-                    status: bn.online ? 'ONLINE' : 'OFFLINE',
-                    sos: bn.sos !== undefined ? bn.sos : (n.sos || 0),
-                    rssi: bn.rssi !== undefined ? bn.rssi : n.rssi,
-                    batteryVolts: bn.batteryVolts ?? n.batteryVolts,
-                    batteryPct: bn.batteryPct ?? n.batteryPct,
-                    lastSeen: bn.lastSeen || (bn.online ? 'Live (<1s)' : 'Lost Heartbeat')
-                  };
-                })
-              );
+              const backendNodes = Object.entries(data.nodes).map(([k, bn]) => ({
+                id: bn.id || (k === 'gw' ? 'GW-USB-01' : `NODE-Z${bn.z || k}`),
+                zNum: bn.z !== undefined ? bn.z : (k === 'gw' ? 0 : Number(k) || 1),
+                name: k === 'gw' ? 'Command Center USB Gateway' : `Zone ${bn.z || k} Field Node`,
+                role: bn.role || (k === 'gw' ? 'GATEWAY' : 'FIELD_NODE'),
+                zoneId: k === 'gw' ? 'COMMAND' : `ZONE-${String.fromCharCode(64 + (Number(bn.z || k) || 1))}`,
+                location: k === 'gw' ? 'Laptop USB Serial Port' : `Zone ${bn.z || k} Physical Node`,
+                protocol: bn.protocol || 'ESP-NOW 2.4GHz Direct Mesh',
+                status: bn.online ? 'ONLINE' : 'OFFLINE',
+                batteryVolts: bn.batteryVolts,
+                batteryPct: bn.batteryPct,
+                rssi: bn.rssi,
+                sos: bn.sos !== undefined ? bn.sos : 0,
+                lastSeen: bn.lastSeen || (bn.online ? 'Live (<1s)' : 'Disconnected')
+              }));
+              setNodes(backendNodes);
             }
 
             // Sync Alerts (Real-time only)
@@ -1943,7 +1899,7 @@ export default function App() {
                       <div className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 flex items-center gap-1.5">
                         <Radio className="w-3.5 h-3.5 text-cyan-400" />
                         <span className="text-zinc-400">Mesh Gateway:</span>
-                        <span className="text-emerald-400 font-bold">{onlineNodesCount}/4 Online</span>
+                        <span className="text-emerald-400 font-bold">{serialState.connected ? `ONLINE (${serialState.port || "COM7"})` : (nodes.some(n => n.status === "ONLINE") ? "ONLINE" : "STANDBY")}</span>
                       </div>
 
                       <div className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 flex items-center gap-1.5">
@@ -2099,8 +2055,18 @@ export default function App() {
                               latency_ms: model.id === 'p2pnet' ? 18.5 : model.id === 'dm_count' ? 21.0 : model.id === 'csrnet' ? 24.2 : 29.8,
                               fps: model.id === 'p2pnet' ? 54.0 : model.id === 'dm_count' ? 47.6 : model.id === 'csrnet' ? 41.3 : 33.5
                             }}
-                            density={model.id === 'p2pnet' ? 1.45 : model.id === 'dm_count' ? 2.40 : model.id === 'csrnet' ? 3.84 : 5.30}
-                            count={model.id === 'p2pnet' ? 210 : model.id === 'dm_count' ? 576 : model.id === 'csrnet' ? 365 : 2540}
+                            density={
+                              model.id === 'p2pnet' ? Number(zones.z1?.density || 0.0) :
+                              model.id === 'dm_count' ? Number(zones.z4?.density || 0.0) :
+                              model.id === 'csrnet' ? Number(zones.z2?.density || 0.0) :
+                              Number(zones.z3?.density || 0.0)
+                            }
+                            count={
+                              model.id === 'p2pnet' ? (zones.z1?.personCount || 0) :
+                              model.id === 'dm_count' ? (zones.z4?.personCount || 0) :
+                              model.id === 'csrnet' ? (zones.z2?.personCount || 0) :
+                              (zones.z3?.personCount || 0)
+                            }
                             zoneName={model.zone}
                           />
                         </div>
@@ -3079,7 +3045,7 @@ export default function App() {
                   })()}
 
                   {/* IoT Hardware Mesh Nodes & Live Physical SOS Beacon Markers */}
-                                    {gisLayers.nodes && nodes.map((n) => {
+                                    {gisLayers.nodes && nodes.filter((n) => n.status === 'ONLINE' || n.sos === 1).map((n) => {
                     const isOnline = n.status === 'ONLINE';
                     const isSosActive = n.sos === 1;
                     const nx = n.zNum === 1 ? 75 : n.zNum === 2 ? 450 : n.zNum === 3 ? 275 : 350;
@@ -4024,7 +3990,7 @@ export default function App() {
                   })()}
 
                   {/* IoT Hardware Mesh Nodes & Live Physical SOS Beacon Markers */}
-                                    {gisLayers.nodes && nodes.map((n) => {
+                                    {gisLayers.nodes && nodes.filter((n) => n.status === 'ONLINE' || n.sos === 1).map((n) => {
                     const isOnline = n.status === 'ONLINE';
                     const isSosActive = n.sos === 1;
                     const nx = n.zNum === 1 ? 75 : n.zNum === 2 ? 450 : n.zNum === 3 ? 275 : 350;
@@ -4631,7 +4597,7 @@ export default function App() {
               <div className="text-xs text-zinc-400 flex items-center gap-3">
                 <span>GATEWAY: <strong className={backendOnline ? 'text-emerald-400' : 'text-red-400'}>{backendOnline ? 'ONLINE (COM7)' : 'STANDBY'}</strong></span>
                 <span>•</span>
-                <span>NODES: <strong className="text-white">{nodes.filter(n => n.status === 'ONLINE').length}/4 ACTIVE</strong></span>
+                <span>NODES: <strong className="text-white">{nodes.filter(n => n.status === 'ONLINE').length} ACTIVE</strong></span>
               </div>
             </div>
 
@@ -4677,11 +4643,11 @@ export default function App() {
           </div>
           <div>
             <span className="text-zinc-600 block">BATTERY</span>
-            <span className="text-zinc-300">{node.batteryVolts}V ({node.batteryPct}%)</span>
+            <span className="text-zinc-300">{node.batteryVolts ? `${node.batteryVolts}V (${node.batteryPct}%)` : (isOnline ? "USB 5.0V (100%)" : "N/A")}</span>
           </div>
           <div>
             <span className="text-zinc-600 block">RSSI</span>
-            <span className="text-zinc-300">{node.rssi} dBm</span>
+            <span className="text-zinc-300">{node.rssi ? `${node.rssi} dBm` : "N/A"}</span>
           </div>
         </div>
 
