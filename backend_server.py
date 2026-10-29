@@ -859,14 +859,19 @@ def evaluate_rules_and_routes():
                 cooldown_sec=20.0,
             )
 
-    # Check node heartbeats: if a node sent data before but went silent > 20s
-    for nid, ndata in state["nodes"].items():
-        last_t = ndata.get("ts", 0.0)
+    # Check node heartbeats: gateway reflects real COM port, field nodes timeout after 20s
+    for nid, ndata in list(state['nodes'].items()):
+        if nid == 'gw':
+            is_gw_online = bool(active_serial_conn and active_serial_conn.is_open)
+            ndata['online'] = is_gw_online
+            ndata['lastSeen'] = f'Connected on {current_serial_port}' if is_gw_online else ('Standby (Auto-Detecting COM)' if not serial_user_pause else 'Released for Upload')
+            continue
+        last_t = ndata.get('ts', 0.0)
         if last_t > 0:
             silent_sec = now - last_t
             is_online = silent_sec <= 20.0
-            ndata["online"] = is_online
-            ndata["lastSeen"] = f"{int(silent_sec)}s ago" if is_online else "Standby (No Telemetry)"
+            ndata['online'] = is_online
+            ndata['lastSeen'] = f'{int(silent_sec)}s ago' if is_online else 'Standby (No Telemetry)'
 
     # Recompute live routes via standard NetworkX and GIS Spatial Engine
     state["routes"] = compute_safe_routes(VENUE_GRAPH, zone_levels, state["blocked_edges"])
@@ -1034,55 +1039,82 @@ def embedded_serial_gateway_worker(loop):
                     print(f"[SERIAL GATEWAY] Port release requested. Closing {port}...")
                     break
                 # 1. Read packet line from ESP
-                line = ser.readline().decode("utf-8", errors="ignore").strip()
+                line = ser.readline().decode('utf-8', errors='ignore').strip()
                 if line:
                     try:
-                        rssi_val = -65
-                        if "\t" in line:
-                            payload_str, rssi_str = line.split("\t", 1)
-                            ev = json.loads(payload_str)
-                            try:
-                                rssi_val = int(rssi_str.strip())
-                            except ValueError:
-                                rssi_val = -65
+                        # Extract JSON substring {...} regardless of prefix/suffix (e.g. [RX Packet], [TX SOS], etc.)
+                        b_start = line.find('{')
+                        b_end = line.rfind('}')
+                        if b_start != -1 and b_end != -1 and b_end > b_start:
+                            json_str = line[b_start:b_end + 1]
+                            ev = json.loads(json_str)
                         else:
-                            ev = json.loads(line)
+                            continue
 
                         if not isinstance(ev, dict):
                             continue
 
-                        if "status" in ev:
-                            print(f"[SERIAL GATEWAY] Gateway status: {line}")
+                        if 'status' in ev:
+                            print(f'[SERIAL GATEWAY] Gateway status: {line}')
                             continue
 
-                        z_num = ev.get("z", 1)
+                        # Extract RSSI value
+                        rssi_val = -62
+                        if '\t' in line:
+                            try:
+                                rssi_val = int(line.split('\t')[-1].strip().split()[0])
+                            except Exception:
+                                rssi_val = -62
+                        elif 'rssi' in ev:
+                            try:
+                                rssi_val = int(ev['rssi'])
+                            except Exception:
+                                rssi_val = -62
+
+                        # Extract zone number: check 'z', 'zone', or node name like 'NODE-Z1'
+                        z_num = ev.get('z')
+                        if z_num is None:
+                            z_num = ev.get('zone')
+                        if z_num is None and 'node' in ev:
+                            node_str = str(ev['node']).upper()
+                            for zn in [1, 2, 3, 4]:
+                                if f'Z{zn}' in node_str or f'ZONE{zn}' in node_str:
+                                    z_num = zn
+                                    break
+                        if z_num is None:
+                            z_num = 1
+                        z_num = int(z_num)
+
                         nid = str(z_num)
                         now_ts = time.time()
-                        state["last_real_node"] = now_ts
-                        ev["ts"] = now_ts
-                        ev["online"] = True
-                        ev["rssi"] = ev.get("rssi", rssi_val)
-                        ev["lastSeen"] = "Live (<1s)"
+                        state['last_real_node'] = now_ts
+                        ev['ts'] = now_ts
+                        ev['online'] = True
+                        ev['rssi'] = rssi_val
+                        ev['lastSeen'] = 'Live (<1s)'
+                        ev['z'] = z_num
 
-                        if nid in state["nodes"]:
-                            state["nodes"][nid].update(ev)
+                        if nid in state['nodes']:
+                            state['nodes'][nid].update(ev)
                         else:
-                            state["nodes"][nid] = ev
+                            state['nodes'][nid] = ev
 
-                        if ev.get("sos") == 1:
-                            print(f"[SERIAL GATEWAY SOS ALERT] *** CONFIRMED SOS FROM NODE {z_num} (RSSI: {ev.get('rssi')} dBm) ***")
-                            trigger_sos_medical_incident(f"z{z_num}", f"NODE-Z{z_num}", f"Hardware SOS Button on ESP32 Node Z{z_num} (RSSI: {ev.get('rssi')} dBm)")
-                            log_operator_action("Hardware_Node", "HARDWARE_SOS_RECEIVED", f"Physical SOS on Node z{z_num} (GPIO 13)")
+                        # Check SOS flag (handles int 1, str '1', bool True, or 'SOS')
+                        sos_raw = ev.get('sos', 0)
+                        is_sos = (sos_raw == 1 or sos_raw == '1' or sos_raw is True or str(sos_raw).upper() == 'SOS')
+
+                        if is_sos:
+                            print(f'[SERIAL GATEWAY SOS ALERT] *** CONFIRMED SOS FROM NODE {z_num} (RSSI: {rssi_val} dBm) ***')
+                            trigger_sos_medical_incident(f'z{z_num}', f'NODE-Z{z_num}', f'Hardware SOS Button on ESP32 Node Z{z_num} (RSSI: {rssi_val} dBm)')
+                            log_operator_action('Hardware_Node', 'HARDWARE_SOS_RECEIVED', f'Physical SOS on Node z{z_num} (GPIO 13)')
                         else:
-                            print(f"[SERIAL GATEWAY RX] Node {z_num} Heartbeat: seq={ev.get('seq')} RSSI={ev.get('rssi')} dBm")
+                            print(f'[SERIAL GATEWAY RX] Node {z_num} Heartbeat: seq={ev.get("seq")} RSSI={rssi_val} dBm')
 
                         if loop and not loop.is_closed():
                             asyncio.run_coroutine_threadsafe(broadcast_state(), loop)
 
-                    except json.JSONDecodeError as j_err:
-                        print(f"[SERIAL GATEWAY] JSON decode ignore: '{line}' ({j_err})")
                     except Exception as parse_err:
-                        print(f"[SERIAL GATEWAY] Ingest error: {parse_err}")
+                        print(f'[SERIAL GATEWAY] Ingest error on line "{line}": {parse_err}')
 
                 # 2. Check for pending downlinks to transmit
                 if downlink_queue:
