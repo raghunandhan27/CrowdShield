@@ -16,6 +16,8 @@
 
 // --- Pin Definitions ---
 #define LED_PIN     27   // Status LED (via 330Ω to GND)
+// SILENT PRESENTATION MODE: Set to 1 to mute hardware speaker for Judge Presentation
+#define SILENT_PRESENTATION_MODE 1
 #define BUTTON_PIN  13   // SOS Button (One leg to GPIO 13, other leg to GND)
 
 // DFPlayer Mini on HardwareSerial 2
@@ -99,7 +101,11 @@ void setup() {
 
   if (myDFPlayer.begin(dfSerial, false, false)) {
     dfPlayerOnline = true;
+    #if SILENT_PRESENTATION_MODE
+    myDFPlayer.volume(0); // Muted for Judge Presentation
+#else
     myDFPlayer.volume(24); // Stable volume prevents power dip
+#endif
     delay(100);
     Serial.println(" -> DFPlayer Mini: DETECTED! Playing Track 1 from SD Card...");
     updateLcd("2. AUDIO: OK!   ", "PLAYING TRACK 1 ");
@@ -165,11 +171,15 @@ void loop() {
     }
 
     // C. Play Next Song / Alarm on Speaker
+#if SILENT_PRESENTATION_MODE
+    Serial.println("[Audio] SOS Alarm Triggered (Audio Muted for Judges Presentation)");
+#else
     if (dfPlayerOnline) {
       Serial.println("[Audio] Playing Next Track / Alarm Sound...");
-      myDFPlayer.volume(30); // Max volume on SOS
-      myDFPlayer.next();     // Cycles to next song/track on SD card
+      myDFPlayer.volume(24);
+      myDFPlayer.next();
     }
+#endif
 
     // D. Send Instant Emergency LoRa Packet
     if (loraOnline) {

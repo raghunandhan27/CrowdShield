@@ -87,6 +87,8 @@
 #endif
 
 // Pin Assignments
+// SILENT PRESENTATION MODE: Set to 1 to mute hardware speaker for Judge Presentation
+#define SILENT_PRESENTATION_MODE 1
 #define BUTTON_PIN 13   // SOS Button connected to GPIO 13 and GND
 #define LED_PIN    27   // Status & Alarm LED
 #define MIC_PIN    34   // Optional sound/mic analog sensor (ADC1)
@@ -329,8 +331,13 @@ void setup() {
 
   myDFPlayer.begin(dfSerial, false, false);
   dfPlayerOnline = true;
+  #if SILENT_PRESENTATION_MODE
+  myDFPlayer.volume(0); // Muted for Judge Presentation
+  Serial.println("[DFPlayer] Speaker Muted (SILENT_PRESENTATION_MODE Active for Judges)");
+#else
   myDFPlayer.volume(24); // Stable volume prevents power dip
   Serial.println("[DFPlayer] Active & Ready on TX2 Pin 26 (Volume 24)");
+#endif
 
   // 3. Initialize SX1278 LoRa Radio (433MHz)
   LoRa.setPins(LORA_SS, LORA_RST, LORA_DIO0);
@@ -425,9 +432,13 @@ void loop() {
     if (now - lastAudioPlayTime > 3000 || track != lastAudioTrack) {
       lastAudioPlayTime = now;
       lastAudioTrack = track;
+#if SILENT_PRESENTATION_MODE
+      Serial.printf("\n>>> [ACTION] Warning Track %d Triggered (Audio Muted for Judges Presentation) <<<\n", track);
+#else
       Serial.printf("\n>>> [ACTION] Playing Warning Message Track %d on DFPlayer Mini (Level %d) <<<\n", track, lvl);
       myDFPlayer.volume(24);
       myDFPlayer.play(track);
+#endif
 
       // Update 1602 LCD Display and Visual LED only on fresh command / cooldown
       if (track == 1) {

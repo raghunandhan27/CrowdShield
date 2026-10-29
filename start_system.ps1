@@ -12,7 +12,8 @@ Write-Host "Waiting for backend server to initialize..." -ForegroundColor Gray
 Start-Sleep -Seconds 3
 
 Write-Host "[2/3] Launching CrowdWatch Command Center Desktop Window..." -ForegroundColor Green
-$electronCli = "D:\crowdwatch-app\node_modules\electron\cli.js"
+$frontendDir = Join-Path (Get-Location) "frontend"
+$electronCli = Join-Path $frontendDir "node_modules\electron\cli.js"
 $edgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 if (-not (Test-Path $edgePath)) {
     $edgePath = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
@@ -20,7 +21,7 @@ if (-not (Test-Path $edgePath)) {
 
 if (Test-Path $electronCli) {
     Write-Host "[3/3] Launching Native Electron Command Center Window..." -ForegroundColor Cyan
-    Start-Process node -ArgumentList "`"$electronCli`"", "`"D:\crowdwatch-app`""
+    Start-Process node -ArgumentList "`"$electronCli`"", "`"$frontendDir`""
 } elseif (Test-Path $edgePath) {
     Write-Host "[3/3] Opening Frameless Desktop App Mode via Edge..." -ForegroundColor Cyan
     Start-Process $edgePath -ArgumentList "--app=http://localhost:8000", "--start-maximized"

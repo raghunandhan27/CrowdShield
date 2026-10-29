@@ -38,15 +38,22 @@ function checkBackendReady(url, timeoutMs = 2000) {
 }
 
 function launchBackend() {
-  const pythonExe = 'D:\\crowdshield\\.venv\\Scripts\\python.exe';
-  const serverPy = 'D:\\crowdshield\\backend_server.py';
+  const projectRoot = path.resolve(__dirname, '..');
+  const pythonExe = process.env.CROWDSHIELD_PYTHON || path.join(projectRoot, '.venv', 'Scripts', 'python.exe');
+  const serverPy = path.join(projectRoot, 'backend_server.py');
   if (fs.existsSync(pythonExe) && fs.existsSync(serverPy)) {
     console.log('[Electron] Auto-spawning Python Spine Backend (Port 8000)...');
     backendProcess = spawn(pythonExe, [serverPy], {
-      cwd: 'D:\\crowdshield',
+      cwd: projectRoot,
       detached: false,
       stdio: 'ignore'
     });
+    backendProcess.on('error', (error) => {
+      console.error('[Electron] Could not start the Python backend:', error.message);
+      backendProcess = null;
+    });
+  } else {
+    console.error('[Electron] Backend files not found. Set CROWDSHIELD_PYTHON or run the backend separately.');
   }
 }
 

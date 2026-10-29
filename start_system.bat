@@ -17,8 +17,8 @@ echo Waiting for backend server to initialize...
 timeout /t 3 /nobreak >nul
 
 echo [3/3] Launching CrowdWatch Command Center Desktop Window...
-if exist "D:\crowdwatch-app\node_modules\electron\cli.js" (
-    start "" node "D:\crowdwatch-app\node_modules\electron\cli.js" "D:\crowdwatch-app"
+if exist "D:\crowdshield\frontend\node_modules\electron\cli.js" (
+    start "" node "D:\crowdshield\frontend\node_modules\electron\cli.js" "D:\crowdshield\frontend"
 ) else if exist "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" (
     start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:8000 --start-maximized
 ) else if exist "C:\Program Files\Microsoft\Edge\Application\msedge.exe" (

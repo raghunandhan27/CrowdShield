@@ -713,7 +713,7 @@ export default function App() {
   const [backendOnline, setBackendOnline] = useState(false);
   const [liveMode, setLiveMode] = useState('CONNECTING...');
   const [systemFps, setSystemFps] = useState(0.0);
-  const [audioMuted, setAudioMuted] = useState(false);
+  const [audioMuted, setAudioMuted] = useState(true); // Default to MUTED for Judge Presentation Mode
 
   // Real Camera Add Form State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -898,7 +898,7 @@ export default function App() {
   const sirenGainRef = useRef(null);
 
   const startSiren = () => {
-    if (audioMuted) return;
+    return; // Silenced for Judge Presentation Mode to prevent disturbing judges
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
@@ -1829,11 +1829,11 @@ export default function App() {
           <button
             onClick={() => setAudioMuted((prev) => !prev)}
             title={audioMuted ? 'Voice Alerts Muted' : 'Voice Alerts Enabled (Web Speech)'}
-            className={`p-2 rounded border text-xs flex items-center gap-1.5 ${
-              audioMuted ? 'bg-zinc-900 border-zinc-800 text-zinc-500' : 'bg-zinc-900 border-zinc-700 text-emerald-400'
+            className={`px-2.5 py-1 rounded border text-xs flex items-center gap-1.5 transition ${
+              audioMuted ? 'bg-amber-950/60 border-amber-600/70 text-amber-300' : 'bg-zinc-900 border-zinc-700 text-emerald-400'
             }`}
           >
-            {audioMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+            {audioMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}<span className="text-[11px] font-semibold">{audioMuted ? 'SILENT (JUDGES MODE)' : 'AUDIO ON'}</span>
           </button>
 
           {/* Quick Siren All */}
