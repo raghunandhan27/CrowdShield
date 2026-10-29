@@ -617,42 +617,80 @@ class RealCameraFeed:
                 if heatmap is not None:
                     hud = cv2.addWeighted(heatmap, 0.40, hud, 0.60, 0)
 
-            # Draw Tactical Bounding Boxes & P2PNet Head Dots
+            # Draw Tactical Clean Bounding Boxes for Pedestrians (Simple Box Type)
             for b in boxes:
                 x1, y1, x2, y2 = map(int, b[:4])
                 x1, y1 = max(0, min(639, x1)), max(0, min(479, y1))
                 x2, y2 = max(0, min(639, x2)), max(0, min(479, y2))
                 cv2.rectangle(hud, (x1, y1), (x2, y2), box_color, 1)
-                # Cyan Head-Dot (crown of head) - P2PNet
-                head_x = int((x1 + x2) / 2)
-                head_y = int(y1 + (y2 - y1) * 0.12)
-                cv2.circle(hud, (head_x, head_y), 3, (248, 189, 56), -1)
-                # Ground foot point projected onto GIS plane
-                cv2.circle(hud, (head_x, y2), 3, (56, 189, 248), -1)
 
-            # Draw Tactical Red Reticles around Fallen Persons (PCC Alert)
+            # Spatial clustering helper to merge proximate/overlapping alert boxes into unified incident boxes
+            def _cluster_alert_boxes(raw_box_list, dist_thresh=70):
+                if not raw_box_list:
+                    return []
+                clusters = []
+                for b in raw_box_list:
+                    bx1, by1, bx2, by2 = int(b[0]), int(b[1]), int(b[2]), int(b[3])
+                    bx1, by1 = max(0, min(639, bx1)), max(0, min(479, by1))
+                    bx2, by2 = max(0, min(639, bx2)), max(0, min(479, by2))
+                    merged = False
+                    for c in clusters:
+                        dx = max(0, max(bx1, c[0]) - min(bx2, c[2]))
+                        dy = max(0, max(by1, c[1]) - min(by2, c[3]))
+                        if dx < dist_thresh and dy < dist_thresh:
+                            c[0] = min(c[0], bx1)
+                            c[1] = min(c[1], by1)
+                            c[2] = max(c[2], bx2)
+                            c[3] = max(c[3], by2)
+                            merged = True
+                            break
+                    if not merged:
+                        clusters.append([bx1, by1, bx2, by2])
+                return clusters
+
+            # Professional Simple-Box Overlay for Fallen Persons (PCC Alert)
+            fall_raw_boxes = []
             for f in fallen:
-                cx, cy = f["center"]
-                cx = max(20, min(620, cx))
-                cy = max(20, min(460, cy))
-                pulse = int(22 + 6 * math.sin(time.time() * 9))
-                cv2.circle(hud, (cx, cy), pulse, (0, 0, 255), 2, cv2.LINE_AA)
-                cv2.circle(hud, (cx, cy), pulse + 6, (0, 0, 220), 1, cv2.LINE_AA)
-                cv2.line(hud, (cx - pulse - 6, cy), (cx + pulse + 6, cy), (0, 0, 255), 1)
-                cv2.line(hud, (cx, cy - pulse - 6), (cx, cy + pulse + 6), (0, 0, 255), 1)
-                cv2.rectangle(hud, (cx - 68, cy - pulse - 22), (cx + 68, cy - pulse - 4), (0, 0, 180), -1)
-                cv2.putText(hud, "! PERSON DOWN !", (cx - 64, cy - pulse - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1)
+                fb = f.get("box")
+                if fb and len(fb) >= 4:
+                    fall_raw_boxes.append(fb[:4])
+                elif "center" in f:
+                    cx, cy = f["center"]
+                    fall_raw_boxes.append([cx - 35, cy - 20, cx + 35, cy + 20])
 
-            # Draw Tactical Amber/Red Reticles around Violent Brawls / Fights
+            for fb in _cluster_alert_boxes(fall_raw_boxes, dist_thresh=60):
+                fx1, fy1, fx2, fy2 = fb
+                cv2.rectangle(hud, (fx1, fy1), (fx2, fy2), (0, 0, 220), 2)
+                lbl = "ALERT: FALL DETECTED"
+                (tw, th), _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, 0.34, 1)
+                badge_y1 = max(2, fy1 - th - 6)
+                badge_y2 = fy1
+                cv2.rectangle(hud, (fx1, badge_y1), (min(638, fx1 + tw + 8), badge_y2), (0, 0, 220), -1)
+                cv2.putText(hud, lbl, (fx1 + 4, badge_y2 - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.34, (255, 255, 255), 1, cv2.LINE_AA)
+
+            # Professional Simple-Box Overlay for Violent Brawls / Scuffles
+            fight_raw_boxes = []
             for fg in fights:
-                cx, cy = fg["center"]
-                cx = max(20, min(620, cx))
-                cy = max(20, min(460, cy))
-                pulse = int(24 + 7 * math.sin(time.time() * 12))
-                cv2.circle(hud, (cx, cy), pulse, (0, 140, 255), 2, cv2.LINE_AA)
-                cv2.circle(hud, (cx, cy), pulse + 8, (0, 69, 255), 2, cv2.LINE_AA)
-                cv2.rectangle(hud, (cx - 80, cy - pulse - 24), (cx + 80, cy - pulse - 4), (0, 69, 255), -1)
-                cv2.putText(hud, "! BRAWL / FIGHT !", (cx - 74, cy - pulse - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1)
+                fb = fg.get("box")
+                if fb and len(fb) >= 4:
+                    fight_raw_boxes.append(fb[:4])
+                elif "center" in fg:
+                    cx, cy = fg["center"]
+                    fight_raw_boxes.append([cx - 45, cy - 45, cx + 45, cy + 45])
+
+            for fb in _cluster_alert_boxes(fight_raw_boxes, dist_thresh=80):
+                bx1, by1, bx2, by2 = fb
+                bx1 = max(0, bx1 - 6)
+                by1 = max(0, by1 - 6)
+                bx2 = min(639, bx2 + 6)
+                by2 = min(479, by2 + 6)
+                cv2.rectangle(hud, (bx1, by1), (bx2, by2), (0, 69, 255), 2)
+                lbl = "ALERT: CROWD CONFLICT"
+                (tw, th), _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, 0.34, 1)
+                badge_y1 = max(2, by1 - th - 6)
+                badge_y2 = by1
+                cv2.rectangle(hud, (bx1, badge_y1), (min(638, bx1 + tw + 8), badge_y2), (0, 69, 255), -1)
+                cv2.putText(hud, lbl, (bx1 + 4, badge_y2 - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.34, (255, 255, 255), 1, cv2.LINE_AA)
 
             # Top Telemetry Ribbon
             cv2.rectangle(hud, (0, 0), (640, 28), (0, 0, 0), -1)
