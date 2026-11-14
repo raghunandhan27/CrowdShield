@@ -78,11 +78,6 @@ def generate_patent_document():
     sec1.page_width = Cm(21.0)
     sec1.page_height = Cm(29.7)
     
-    # Rule 9 Line Numbering: Every 5th line on every page
-    sectPr1 = sec1._sectPr
-    lnNumType = parse_xml(f'<w:lnNumType {nsdecls("w")} w:countBy="5" w:restart="newPage" w:distance="720"/>')
-    sectPr1.append(lnNumType)
-    
     # Rule 9 Page Numbering: Centered bottom
     add_centered_page_number(sec1.footer)
     
@@ -146,20 +141,18 @@ def generate_patent_document():
     set_cell_margins(cell_left, top=100, bottom=100, left=140, right=140)
     set_cell_margins(cell_right, top=50, bottom=50, left=80, right=80)
     
-    # Left cell: Clean text identification (Rule 15: No decorative logos in official patent specification)
+    # Left cell: VIT Official Branding and Logo (Preserved per institutional guidelines)
     p_l = cell_left.paragraphs[0]
     p_l.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p_l.paragraph_format.space_before = Pt(0)
     p_l.paragraph_format.space_after = Pt(0)
     p_l.paragraph_format.line_spacing = 1.2
     
-    r_uni = p_l.add_run("VELLORE INSTITUTE OF TECHNOLOGY (VIT)\n")
-    r_uni.font.name = 'Times New Roman'
-    r_uni.font.size = Pt(11)
-    r_uni.font.bold = True
-    r_uni.font.color.rgb = RGBColor(0, 0, 0)
-    
-    r_idf = p_l.add_run("Invention Disclosure Format (IDF)-B")
+    logo_path = os.path.join(BASE_DIR, "patent_assets", "vit_logo.png")
+    if os.path.exists(logo_path):
+        p_l.add_run().add_picture(logo_path, width=Inches(1.8))
+        
+    r_idf = p_l.add_run("\nInvention Disclosure Format (IDF)-B")
     r_idf.font.name = 'Times New Roman'
     r_idf.font.size = Pt(12)
     r_idf.font.bold = True
@@ -366,8 +359,15 @@ def generate_patent_document():
     # ==================== 7. DETAILED DESCRIPTION ====================
     add_sec_title("7. Description of the invention in detail (Include drawing and or photograph as needed):")
     add_p(
-        "The architecture and functional embodiments of the present invention are described herein with direct reference to the accompanying drawings in FIGS. 1 to 7, wherein like reference numerals designate corresponding elements throughout the specification.",
-        bold_prefix="Cross-Reference to Drawings: "
+        "The architecture, functional embodiments, and algorithmic pipelines of the present invention are described herein with direct reference to the accompanying drawings in FIGS. 1 to 7, wherein like reference numerals designate corresponding structural and functional elements throughout:\n\n"
+        "• FIG. 1 illustrates a method flowchart of the autonomous multi-tier crowd crush mitigation process;\n"
+        "• FIG. 2 illustrates a 4-point planar perspective homography projection schematic mapping optical image plane coordinates to calibrated metric ground space;\n"
+        "• FIG. 3 illustrates a dynamic topological graph incident isolation and Dijkstra detour rerouting schematic;\n"
+        "• FIG. 4 illustrates a cellular-independent dual-radio hardware mesh block diagram comprising edge server, master gateway, and autonomous zonal field nodes;\n"
+        "• FIG. 5 illustrates an empirical validation plot comparing crowd detection accuracy across spatial density regimes for CrowdShield versus conventional object detection;\n"
+        "• FIG. 6 illustrates corridor evacuation clearance curves under dynamic GIS rerouting versus conventional static bottlenecks;\n"
+        "• FIG. 7 illustrates wireless telecommunication benchmark plots comparing one-way latency and packet delivery ratio (PDR) across 2.4 GHz ESP-NOW, 433 MHz LoRa SF9, and jammed cellular 4G/5G.",
+        bold_prefix="Brief Description of the Accompanying Drawings: "
     )
 
     add_p(
@@ -708,17 +708,20 @@ def generate_patent_document():
     sec2.page_width = Cm(21.0)
     sec2.page_height = Cm(29.7)
     
-    # Remove line numbering from drawings section
+    # Ensure no line numbering on drawings section
     sectPr2 = sec2._sectPr
-    sectPr2.remove(sectPr2.find(qn('w:lnNumType')))
+    ln_elem = sectPr2.find(qn('w:lnNumType'))
+    if ln_elem is not None:
+        sectPr2.remove(ln_elem)
     
-    # Drawings list: Sheet X of 5 (Total 5 drawing sheets)
+    # Drawings list: Sheet X of 6 (Total 6 drawing sheets)
     drawing_sheets = [
-        ("Sheet 1 of 5", "fig1_pipeline_flowchart.png", Inches(5.6)),
-        ("Sheet 2 of 5", "fig2_homography_schematic.png", Inches(5.4)),
-        ("Sheet 3 of 5", "fig3_topological_graph.png", Inches(5.4)),
-        ("Sheet 4 of 5", "fig4_hardware_block_diagram.png", Inches(5.6)),
-        ("Sheet 5 of 5", "fig5_accuracy_vs_density.png", Inches(4.5), "fig6_evacuation_clearance.png", Inches(4.5))
+        ("Sheet 1 of 6", "fig1_pipeline_flowchart.png", Inches(5.0)),
+        ("Sheet 2 of 6", "fig2_homography_schematic.png", Inches(5.4)),
+        ("Sheet 3 of 6", "fig3_topological_graph.png", Inches(5.4)),
+        ("Sheet 4 of 6", "fig4_hardware_block_diagram.png", Inches(5.5)),
+        ("Sheet 5 of 6", "fig5_accuracy_vs_density.png", Inches(4.4), "fig6_evacuation_clearance.png", Inches(4.4)),
+        ("Sheet 6 of 6", "fig7_dual_radio_comparison.png", Inches(5.4))
     ]
     
     for idx_sheet, sheet_info in enumerate(drawing_sheets):
