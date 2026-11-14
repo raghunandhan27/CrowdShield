@@ -39,6 +39,8 @@ def set_cell_background(cell, fill_hex):
 def set_table_borders(table, color="000000", sz="4", val="single"):
     tblPr = table._element.xpath('w:tblPr')
     if tblPr:
+        for existing in tblPr[0].xpath('w:tblBorders'):
+            tblPr[0].remove(existing)
         borders = parse_xml(
             f'<w:tblBorders {nsdecls("w")}>\n'
             f'  <w:top w:val="{val}" w:sz="{sz}" w:space="0" w:color="{color}"/>\n'
@@ -153,7 +155,7 @@ def generate_patent_document():
     
     header_tbl = doc.add_table(rows=1, cols=2)
     header_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-    set_table_borders(header_tbl, color="000000", sz="6")
+    set_table_borders(header_tbl, color="000000", sz="4")
     
     cell_left = header_tbl.cell(0, 0)
     cell_right = header_tbl.cell(0, 1)

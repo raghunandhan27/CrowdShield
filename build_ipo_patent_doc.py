@@ -39,6 +39,8 @@ def set_cell_background(cell, fill_hex):
 def set_table_borders(table, color="000000", sz="4", val="single"):
     tblPr = table._element.xpath('w:tblPr')
     if tblPr:
+        for existing in tblPr[0].xpath('w:tblBorders'):
+            tblPr[0].remove(existing)
         borders = parse_xml(
             f'<w:tblBorders {nsdecls("w")}>\n'
             f'  <w:top w:val="{val}" w:sz="{sz}" w:space="0" w:color="{color}"/>\n'
