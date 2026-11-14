@@ -156,6 +156,28 @@ def generate_ready_to_upload_document():
             p_eq.paragraph_format.keep_with_next = True
             p_eq.add_run().add_picture(eq_path, width=width)
 
+    def add_photo_inline(img_filename, caption_text, width=Inches(4.5)):
+        img_path = os.path.join(ASSETS_DIR, img_filename)
+        if os.path.exists(img_path):
+            p_img = doc.add_paragraph()
+            p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_img.paragraph_format.space_before = Pt(8)
+            p_img.paragraph_format.space_after = Pt(4)
+            p_img.paragraph_format.line_spacing = 1.0
+            p_img.paragraph_format.keep_with_next = True
+            p_img.add_run().add_picture(img_path, width=width)
+            
+            p_cap = doc.add_paragraph()
+            p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_cap.paragraph_format.space_before = Pt(2)
+            p_cap.paragraph_format.space_after = Pt(12)
+            p_cap.paragraph_format.line_spacing = 1.15
+            r_cap = p_cap.add_run(caption_text)
+            r_cap.font.name = 'Times New Roman'
+            r_cap.font.size = Pt(9.5)
+            r_cap.font.bold = True
+            r_cap.font.color.rgb = RGBColor(0, 0, 0)
+
     def add_highlight_box(title, text_items):
         tbl = doc.add_table(rows=1, cols=1)
         tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -419,8 +441,9 @@ def generate_ready_to_upload_document():
         "• FIG. 4 illustrates a cellular-independent dual-radio hardware mesh block diagram comprising edge server, master gateway, and autonomous zonal field nodes;\n"
         "• FIG. 5 illustrates an empirical validation plot comparing crowd detection accuracy across spatial density regimes for CrowdShield versus conventional object detection;\n"
         "• FIG. 6 illustrates corridor evacuation clearance curves under dynamic GIS rerouting versus conventional static bottlenecks;\n"
-        "• FIG. 7 illustrates wireless telecommunication benchmark plots comparing one-way latency and packet delivery ratio (PDR) across 2.4 GHz ESP-NOW, 433 MHz LoRa SF9, and jammed cellular 4G/5G.",
-        bold_prefix="Cross-Reference to Accompanying Drawings: "
+        "• FIG. 7 illustrates wireless telecommunication benchmark plots comparing one-way latency and packet delivery ratio (PDR) across 2.4 GHz ESP-NOW, 433 MHz LoRa SF9, and jammed cellular 4G/5G;\n"
+        "• Photographs 1 to 3 illustrate physical operational prototype implementations of the multi-node testbench, autonomous zonal guidance nodes, and master RF gateway unit.",
+        bold_prefix="Cross-Reference to Accompanying Drawings & Photographs: "
     )
 
     add_p(
@@ -482,6 +505,17 @@ def generate_ready_to_upload_document():
             "Hardware-Debounced SOS Interrupt: Enforces a 250 ms RC filter plus software lockout to prevent false panic triggers from vibration."
         ]
     )
+
+    add_p(
+        "In accordance with institutional Invention Disclosure Format (IDF-B) guidelines allowing photographic substantiation, physical operational prototype hardware was fabricated and validated across multi-node testbenches (Photographs 1 to 3). The hardware implementation physically realizes the architectural schematic of FIG. 4 and demonstrates complete zero-cloud, infrastructure-independent operation:\n\n"
+        "• Photograph 1 (Multi-Node Field Testbench): Illustrates three autonomous Zonal Guidance Nodes operating concurrently under decentralized battery power (18650 lithium-ion cells with boost regulators). Each node independently receives dual-radio evacuation directives, displaying synchronized guidance on 1602 LCD signboards ('ZONE 3: ENTRY OK / EXIT: GATE C (S)') and broadcasting spoken voice audio directives via 3W acoustic speakers without cellular or cloud backhauls.\n\n"
+        "• Photograph 2 (Autonomous Zonal Guidance Node Close-Up): Illustrates the physical component integration on breadboard testbenches, comprising the ESP32 microcontroller, Ra-02 SX1278 433 MHz LoRa transceiver with helical antenna, DFPlayer Mini MP3 audio module with anti-brownout decoupling capacitor, TP4056 charging circuit, 18650 power cell, and 1602 LCD display.\n\n"
+        "• Photograph 3 (Master RF Gateway Unit): Illustrates the Master Gateway ESP32 unit connected to the Central Edge Server via USB serial (115200 baud) and broadcasting directives simultaneously across 433 MHz LoRa and 2.4 GHz ESP-NOW wireless channels.",
+        bold_prefix="7.9 Physical Hardware Prototype Implementation & Multi-Node Testbench (Photographs 1 to 3): "
+    )
+    add_photo_inline("photo_multi_node_testbench.jpg", "Photograph 1: Multi-node decentralized hardware mesh testbench comprising three autonomous Zonal Guidance Nodes executing localized audio-visual directives independently of external power or cellular networks.", width=Inches(3.8))
+    add_photo_inline("photo_zonal_guidance_node.jpg", "Photograph 2: Physical hardware implementation of an autonomous Zonal Guidance Node (ESP32 MCU, Ra-02 433 MHz LoRa transceiver, 1602 LCD directional display, 3W speaker, DFPlayer Mini voice module, 18650 power cell, and 1000 µF anti-brownout decoupling capacitor).", width=Inches(3.8))
+    add_photo_inline("photo_master_rf_gateway.jpg", "Photograph 3: Physical implementation of the Master RF Gateway ESP32 unit interfacing with the Central Edge Server via USB serial (115200 baud) and broadcasting to field nodes over 433 MHz LoRa and 2.4 GHz ESP-NOW.", width=Inches(4.0))
 
     # ==================== 8. EXPERIMENTAL RESULTS ====================
     add_sec_title("8. Experimental validation results:")
