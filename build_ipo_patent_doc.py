@@ -764,15 +764,8 @@ def generate_patent_document():
                 p_img2.paragraph_format.space_after = Pt(8)
                 p_img2.add_run().add_picture(img2_path, width=w2)
                 
-        # Applicant signature block at bottom of each drawing sheet
-        p_sig = doc.add_paragraph()
-        p_sig.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        p_sig.paragraph_format.space_before = Pt(12)
-        p_sig.paragraph_format.space_after = Pt(0)
-        r_sig = p_sig.add_run("Raghunandhan P. & Manoj\n[Applicant / Authorized Signatory]")
-        r_sig.font.name = 'Times New Roman'
-        r_sig.font.size = Pt(10)
-        r_sig.font.color.rgb = RGBColor(0, 0, 0)
+        # Signature block removed per user request
+        pass
 
     # Save DOCX
     doc.save(DOCX_PATH)
